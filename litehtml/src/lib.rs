@@ -282,6 +282,76 @@ impl MouseEvent {
     }
 }
 
+/// CSS gradient color interpolation space.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ColorSpace {
+    #[default]
+    None = 0,
+    Srgb = 1,
+    SrgbLinear = 2,
+    DisplayP3 = 3,
+    A98Rgb = 4,
+    ProphotoRgb = 5,
+    Rec2020 = 6,
+    Lab = 7,
+    Oklab = 8,
+    Xyz = 9,
+    XyzD50 = 10,
+    XyzD65 = 11,
+    Hsl = 12,
+    Hwb = 13,
+    Lch = 14,
+    Oklch = 15,
+}
+
+impl ColorSpace {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            1 => Self::Srgb,
+            2 => Self::SrgbLinear,
+            3 => Self::DisplayP3,
+            4 => Self::A98Rgb,
+            5 => Self::ProphotoRgb,
+            6 => Self::Rec2020,
+            7 => Self::Lab,
+            8 => Self::Oklab,
+            9 => Self::Xyz,
+            10 => Self::XyzD50,
+            11 => Self::XyzD65,
+            12 => Self::Hsl,
+            13 => Self::Hwb,
+            14 => Self::Lch,
+            15 => Self::Oklch,
+            _ => Self::None,
+        }
+    }
+}
+
+/// CSS gradient hue interpolation method.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum HueInterpolation {
+    #[default]
+    None = 0,
+    Shorter = 1,
+    Longer = 2,
+    Increasing = 3,
+    Decreasing = 4,
+}
+
+impl HueInterpolation {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            1 => Self::Shorter,
+            2 => Self::Longer,
+            3 => Self::Increasing,
+            4 => Self::Decreasing,
+            _ => Self::None,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Conversions: Rust types <-> C types
 // ---------------------------------------------------------------------------
@@ -499,6 +569,43 @@ impl From<Point> for sys::lh_point_t {
     }
 }
 
+/// CSS `text-decoration-style` values.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TextDecorationStyle {
+    #[default]
+    Solid = 0,
+    Double = 1,
+    Dotted = 2,
+    Dashed = 3,
+    Wavy = 4,
+}
+
+impl TextDecorationStyle {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            1 => Self::Double,
+            2 => Self::Dotted,
+            3 => Self::Dashed,
+            4 => Self::Wavy,
+            _ => Self::Solid,
+        }
+    }
+}
+
+/// CSS `text-decoration-thickness` computed value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DecorationThickness {
+    Auto,
+    FromFont,
+    Length(f32),
+}
+
+impl Default for DecorationThickness {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Opaque pointer wrappers (borrowed, read-only)
 // ---------------------------------------------------------------------------
@@ -547,6 +654,52 @@ impl<'a> FontDescription<'a> {
     pub fn decoration_line(&self) -> i32 {
         unsafe { sys::lh_font_description_decoration_line(self.ptr) }
     }
+
+    pub fn decoration_thickness(&self) -> DecorationThickness {
+        let is_predef =
+            unsafe { sys::lh_font_description_decoration_thickness_is_predefined(self.ptr) };
+        if is_predef != 0 {
+            let predef =
+                unsafe { sys::lh_font_description_decoration_thickness_predef(self.ptr) };
+            match predef {
+                1 => DecorationThickness::FromFont,
+                _ => DecorationThickness::Auto,
+            }
+        } else {
+            DecorationThickness::Length(unsafe {
+                sys::lh_font_description_decoration_thickness_value(self.ptr)
+            })
+        }
+    }
+
+    pub fn decoration_style(&self) -> TextDecorationStyle {
+        TextDecorationStyle::from_c_int(unsafe {
+            sys::lh_font_description_decoration_style(self.ptr)
+        })
+    }
+
+    pub fn decoration_color(&self) -> Color {
+        Color::from(unsafe { sys::lh_font_description_decoration_color(self.ptr) })
+    }
+
+    pub fn emphasis_style(&self) -> &'a str {
+        unsafe {
+            let ptr = sys::lh_font_description_emphasis_style(self.ptr);
+            if ptr.is_null() {
+                ""
+            } else {
+                CStr::from_ptr(ptr).to_str().unwrap_or("")
+            }
+        }
+    }
+
+    pub fn emphasis_color(&self) -> Color {
+        Color::from(unsafe { sys::lh_font_description_emphasis_color(self.ptr) })
+    }
+
+    pub fn emphasis_position(&self) -> i32 {
+        unsafe { sys::lh_font_description_emphasis_position(self.ptr) }
+    }
 }
 
 impl std::fmt::Debug for FontDescription<'_> {
@@ -557,6 +710,12 @@ impl std::fmt::Debug for FontDescription<'_> {
             .field("style", &self.style())
             .field("weight", &self.weight())
             .field("decoration_line", &self.decoration_line())
+            .field("decoration_thickness", &self.decoration_thickness())
+            .field("decoration_style", &self.decoration_style())
+            .field("decoration_color", &self.decoration_color())
+            .field("emphasis_style", &self.emphasis_style())
+            .field("emphasis_color", &self.emphasis_color())
+            .field("emphasis_position", &self.emphasis_position())
             .finish()
     }
 }
@@ -732,6 +891,16 @@ impl<'a> LinearGradient<'a> {
             })
             .collect()
     }
+
+    pub fn color_space(&self) -> ColorSpace {
+        ColorSpace::from_c_int(unsafe { sys::lh_linear_gradient_color_space(self.ptr) })
+    }
+
+    pub fn hue_interpolation(&self) -> HueInterpolation {
+        HueInterpolation::from_c_int(unsafe {
+            sys::lh_linear_gradient_hue_interpolation(self.ptr)
+        })
+    }
 }
 
 impl std::fmt::Debug for LinearGradient<'_> {
@@ -740,6 +909,8 @@ impl std::fmt::Debug for LinearGradient<'_> {
             .field("start", &self.start())
             .field("end", &self.end())
             .field("color_points", &self.color_points())
+            .field("color_space", &self.color_space())
+            .field("hue_interpolation", &self.hue_interpolation())
             .finish()
     }
 }
@@ -784,6 +955,16 @@ impl<'a> RadialGradient<'a> {
             })
             .collect()
     }
+
+    pub fn color_space(&self) -> ColorSpace {
+        ColorSpace::from_c_int(unsafe { sys::lh_radial_gradient_color_space(self.ptr) })
+    }
+
+    pub fn hue_interpolation(&self) -> HueInterpolation {
+        HueInterpolation::from_c_int(unsafe {
+            sys::lh_radial_gradient_hue_interpolation(self.ptr)
+        })
+    }
 }
 
 impl std::fmt::Debug for RadialGradient<'_> {
@@ -792,6 +973,8 @@ impl std::fmt::Debug for RadialGradient<'_> {
             .field("position", &self.position())
             .field("radius", &self.radius())
             .field("color_points", &self.color_points())
+            .field("color_space", &self.color_space())
+            .field("hue_interpolation", &self.hue_interpolation())
             .finish()
     }
 }
@@ -821,6 +1004,10 @@ impl<'a> ConicGradient<'a> {
         unsafe { sys::lh_conic_gradient_angle(self.ptr) }
     }
 
+    pub fn radius(&self) -> f32 {
+        unsafe { sys::lh_conic_gradient_radius(self.ptr) }
+    }
+
     pub fn color_points_count(&self) -> i32 {
         unsafe { sys::lh_conic_gradient_color_points_count(self.ptr) }
     }
@@ -836,6 +1023,16 @@ impl<'a> ConicGradient<'a> {
             })
             .collect()
     }
+
+    pub fn color_space(&self) -> ColorSpace {
+        ColorSpace::from_c_int(unsafe { sys::lh_conic_gradient_color_space(self.ptr) })
+    }
+
+    pub fn hue_interpolation(&self) -> HueInterpolation {
+        HueInterpolation::from_c_int(unsafe {
+            sys::lh_conic_gradient_hue_interpolation(self.ptr)
+        })
+    }
 }
 
 impl std::fmt::Debug for ConicGradient<'_> {
@@ -843,7 +1040,10 @@ impl std::fmt::Debug for ConicGradient<'_> {
         f.debug_struct("ConicGradient")
             .field("position", &self.position())
             .field("angle", &self.angle())
+            .field("radius", &self.radius())
             .field("color_points", &self.color_points())
+            .field("color_space", &self.color_space())
+            .field("hue_interpolation", &self.hue_interpolation())
             .finish()
     }
 }
@@ -1481,6 +1681,12 @@ static CONTAINER_VTABLE: sys::lh_container_vtable_t = sys::lh_container_vtable_t
 // Document
 // ---------------------------------------------------------------------------
 
+/// Opaque handle to a litehtml element. Borrows from the parent [`Document`].
+pub struct Element<'a> {
+    ptr: *mut sys::lh_element_t,
+    _phantom: PhantomData<&'a ()>,
+}
+
 /// A parsed HTML document. Wraps the C++ `litehtml::document` and ties its
 /// lifetime to the [`DocumentContainer`] that provides rendering callbacks.
 ///
@@ -1628,6 +1834,67 @@ impl<'a> Document<'a> {
     /// needed.
     pub fn media_changed(&mut self) -> bool {
         unsafe { sys::lh_document_media_changed(self.raw) != 0 }
+    }
+
+    /// Add a CSS stylesheet to the document and apply it immediately.
+    ///
+    /// This parses the CSS, applies matching rules to all elements, and
+    /// recomputes styles. A subsequent [`render`](Self::render) call is
+    /// needed to update the layout.
+    pub fn add_stylesheet(
+        &mut self,
+        css: &str,
+        baseurl: Option<&str>,
+        media: Option<&str>,
+    ) -> Result<(), CreateError> {
+        let c_css = CString::new(css)?;
+        let c_baseurl = baseurl.map(CString::new).transpose()?;
+        let c_media = media.map(CString::new).transpose()?;
+        let baseurl_ptr = c_baseurl
+            .as_ref()
+            .map_or(std::ptr::null(), |s| s.as_ptr());
+        let media_ptr = c_media.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        unsafe {
+            sys::lh_document_add_stylesheet(self.raw, c_css.as_ptr(), baseurl_ptr, media_ptr);
+        }
+        Ok(())
+    }
+
+    /// Get the root element of the document.
+    pub fn root(&self) -> Option<Element<'_>> {
+        let ptr = unsafe { sys::lh_document_root(self.raw) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(Element {
+                ptr,
+                _phantom: PhantomData,
+            })
+        }
+    }
+
+    /// Parse an HTML fragment and append the resulting elements as children
+    /// of `parent`.
+    ///
+    /// If `replace_existing` is true, all existing children of `parent` are
+    /// removed first. A subsequent [`render`](Self::render) call is needed
+    /// to update the layout.
+    pub fn append_children_from_string(
+        &mut self,
+        parent: &Element<'_>,
+        html: &str,
+        replace_existing: bool,
+    ) -> Result<(), CreateError> {
+        let c_html = CString::new(html)?;
+        unsafe {
+            sys::lh_document_append_children_from_string(
+                self.raw,
+                parent.ptr,
+                c_html.as_ptr(),
+                if replace_existing { 1 } else { 0 },
+            );
+        }
+        Ok(())
     }
 }
 

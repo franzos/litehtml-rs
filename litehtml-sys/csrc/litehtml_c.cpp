@@ -555,6 +555,62 @@ int lh_font_description_decoration_line(const lh_font_description_t* fd)
     return d->decoration_line;
 }
 
+int lh_font_description_decoration_thickness_is_predefined(const lh_font_description_t* fd)
+{
+    if (!fd) return 1;
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return d->decoration_thickness.is_predefined() ? 1 : 0;
+}
+
+int lh_font_description_decoration_thickness_predef(const lh_font_description_t* fd)
+{
+    if (!fd) return 0;
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return d->decoration_thickness.is_predefined() ? d->decoration_thickness.predef() : 0;
+}
+
+float lh_font_description_decoration_thickness_value(const lh_font_description_t* fd)
+{
+    if (!fd) return 0.0f;
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return d->decoration_thickness.is_predefined() ? 0.0f : d->decoration_thickness.val();
+}
+
+int lh_font_description_decoration_style(const lh_font_description_t* fd)
+{
+    if (!fd) return 0;
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return static_cast<int>(d->decoration_style);
+}
+
+lh_web_color_t lh_font_description_decoration_color(const lh_font_description_t* fd)
+{
+    if (!fd) return {};
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return to_c(d->decoration_color);
+}
+
+const char* lh_font_description_emphasis_style(const lh_font_description_t* fd)
+{
+    if (!fd) return "";
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return d->emphasis_style.c_str();
+}
+
+lh_web_color_t lh_font_description_emphasis_color(const lh_font_description_t* fd)
+{
+    if (!fd) return {};
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return to_c(d->emphasis_color);
+}
+
+int lh_font_description_emphasis_position(const lh_font_description_t* fd)
+{
+    if (!fd) return 0;
+    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+    return d->emphasis_position;
+}
+
 /* --------------------------------------------------------------------------
  * Accessor functions -- list_marker
  * -------------------------------------------------------------------------- */
@@ -714,6 +770,22 @@ lh_web_color_t lh_linear_gradient_color_point_color(
     return to_c(lg->color_points[idx].color);
 }
 
+int lh_linear_gradient_color_space(const lh_linear_gradient_t* g)
+{
+    if (!g) return 0;
+    const auto* lg = reinterpret_cast<
+        const litehtml::background_layer::linear_gradient*>(g);
+    return static_cast<int>(lg->color_space);
+}
+
+int lh_linear_gradient_hue_interpolation(const lh_linear_gradient_t* g)
+{
+    if (!g) return 0;
+    const auto* lg = reinterpret_cast<
+        const litehtml::background_layer::linear_gradient*>(g);
+    return static_cast<int>(lg->hue_interpolation);
+}
+
 /* --------------------------------------------------------------------------
  * Accessor functions -- radial_gradient
  * -------------------------------------------------------------------------- */
@@ -767,6 +839,22 @@ lh_web_color_t lh_radial_gradient_color_point_color(
     return to_c(rg->color_points[idx].color);
 }
 
+int lh_radial_gradient_color_space(const lh_radial_gradient_t* g)
+{
+    if (!g) return 0;
+    const auto* rg = reinterpret_cast<
+        const litehtml::background_layer::radial_gradient*>(g);
+    return static_cast<int>(rg->color_space);
+}
+
+int lh_radial_gradient_hue_interpolation(const lh_radial_gradient_t* g)
+{
+    if (!g) return 0;
+    const auto* rg = reinterpret_cast<
+        const litehtml::background_layer::radial_gradient*>(g);
+    return static_cast<int>(rg->hue_interpolation);
+}
+
 /* --------------------------------------------------------------------------
  * Accessor functions -- conic_gradient
  * -------------------------------------------------------------------------- */
@@ -785,6 +873,14 @@ float lh_conic_gradient_angle(const lh_conic_gradient_t* g)
     const auto* cg = reinterpret_cast<
         const litehtml::background_layer::conic_gradient*>(g);
     return cg->angle;
+}
+
+float lh_conic_gradient_radius(const lh_conic_gradient_t* g)
+{
+    if (!g) return 0.0f;
+    const auto* cg = reinterpret_cast<
+        const litehtml::background_layer::conic_gradient*>(g);
+    return cg->radius;
 }
 
 int lh_conic_gradient_color_points_count(const lh_conic_gradient_t* g)
@@ -818,6 +914,22 @@ lh_web_color_t lh_conic_gradient_color_point_color(
         return zero;
     }
     return to_c(cg->color_points[idx].color);
+}
+
+int lh_conic_gradient_color_space(const lh_conic_gradient_t* g)
+{
+    if (!g) return 0;
+    const auto* cg = reinterpret_cast<
+        const litehtml::background_layer::conic_gradient*>(g);
+    return static_cast<int>(cg->color_space);
+}
+
+int lh_conic_gradient_hue_interpolation(const lh_conic_gradient_t* g)
+{
+    if (!g) return 0;
+    const auto* cg = reinterpret_cast<
+        const litehtml::background_layer::conic_gradient*>(g);
+    return static_cast<int>(cg->hue_interpolation);
 }
 
 /* --------------------------------------------------------------------------
@@ -901,6 +1013,58 @@ float lh_document_height(const lh_document_t* doc)
     const auto* internal =
         reinterpret_cast<const lh_document_internal*>(doc);
     return internal->doc->height();
+}
+
+/* --------------------------------------------------------------------------
+ * Document content manipulation
+ * -------------------------------------------------------------------------- */
+
+void lh_document_add_stylesheet(lh_document_t* doc,
+                                const char* css_text,
+                                const char* baseurl,
+                                const char* media)
+{
+    if (!doc || !css_text || !css_text[0]) return;
+    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+
+    litehtml::css stylesheet;
+    litehtml::media_query_list_list::ptr mq;
+    if (media && media[0]) {
+        auto mq_list = litehtml::parse_media_query_list(media, internal->doc);
+        mq = std::make_shared<litehtml::media_query_list_list>();
+        mq->add(mq_list);
+    }
+    stylesheet.parse_css_stylesheet(
+        css_text,
+        baseurl ? baseurl : "",
+        internal->doc,
+        mq);
+    stylesheet.sort_selectors();
+
+    auto root = internal->doc->root();
+    if (root) {
+        root->apply_stylesheet(stylesheet);
+        root->compute_styles();
+    }
+}
+
+lh_element_t* lh_document_root(lh_document_t* doc)
+{
+    if (!doc) return nullptr;
+    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+    auto root = internal->doc->root();
+    return reinterpret_cast<lh_element_t*>(root.get());
+}
+
+void lh_document_append_children_from_string(lh_document_t* doc,
+                                              lh_element_t* parent,
+                                              const char* html,
+                                              int replace_existing)
+{
+    if (!doc || !parent || !html) return;
+    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+    auto* elem = reinterpret_cast<litehtml::element*>(parent);
+    internal->doc->append_children_from_string(*elem, html, replace_existing != 0);
 }
 
 /* --------------------------------------------------------------------------

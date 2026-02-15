@@ -115,6 +115,14 @@ float       lh_font_description_size(const lh_font_description_t* fd);
 int         lh_font_description_style(const lh_font_description_t* fd);
 int         lh_font_description_weight(const lh_font_description_t* fd);
 int         lh_font_description_decoration_line(const lh_font_description_t* fd);
+int   lh_font_description_decoration_thickness_is_predefined(const lh_font_description_t* fd);
+int   lh_font_description_decoration_thickness_predef(const lh_font_description_t* fd);
+float lh_font_description_decoration_thickness_value(const lh_font_description_t* fd);
+int   lh_font_description_decoration_style(const lh_font_description_t* fd);
+lh_web_color_t lh_font_description_decoration_color(const lh_font_description_t* fd);
+const char* lh_font_description_emphasis_style(const lh_font_description_t* fd);
+lh_web_color_t lh_font_description_emphasis_color(const lh_font_description_t* fd);
+int   lh_font_description_emphasis_position(const lh_font_description_t* fd);
 
 /* list_marker getters */
 const char*    lh_list_marker_image(const lh_list_marker_t* m);
@@ -140,6 +148,8 @@ lh_point_t     lh_linear_gradient_end(const lh_linear_gradient_t* g);
 int            lh_linear_gradient_color_points_count(const lh_linear_gradient_t* g);
 float          lh_linear_gradient_color_point_offset(const lh_linear_gradient_t* g, int idx);
 lh_web_color_t lh_linear_gradient_color_point_color(const lh_linear_gradient_t* g, int idx);
+int            lh_linear_gradient_color_space(const lh_linear_gradient_t* g);
+int            lh_linear_gradient_hue_interpolation(const lh_linear_gradient_t* g);
 
 /* radial_gradient getters */
 lh_point_t     lh_radial_gradient_position(const lh_radial_gradient_t* g);
@@ -147,13 +157,18 @@ lh_point_t     lh_radial_gradient_radius(const lh_radial_gradient_t* g);
 int            lh_radial_gradient_color_points_count(const lh_radial_gradient_t* g);
 float          lh_radial_gradient_color_point_offset(const lh_radial_gradient_t* g, int idx);
 lh_web_color_t lh_radial_gradient_color_point_color(const lh_radial_gradient_t* g, int idx);
+int            lh_radial_gradient_color_space(const lh_radial_gradient_t* g);
+int            lh_radial_gradient_hue_interpolation(const lh_radial_gradient_t* g);
 
 /* conic_gradient getters */
 lh_point_t     lh_conic_gradient_position(const lh_conic_gradient_t* g);
 float          lh_conic_gradient_angle(const lh_conic_gradient_t* g);
+float          lh_conic_gradient_radius(const lh_conic_gradient_t* g);
 int            lh_conic_gradient_color_points_count(const lh_conic_gradient_t* g);
 float          lh_conic_gradient_color_point_offset(const lh_conic_gradient_t* g, int idx);
 lh_web_color_t lh_conic_gradient_color_point_color(const lh_conic_gradient_t* g, int idx);
+int            lh_conic_gradient_color_space(const lh_conic_gradient_t* g);
+int            lh_conic_gradient_hue_interpolation(const lh_conic_gradient_t* g);
 
 /* --------------------------------------------------------------------------
  * Container callback vtable
@@ -284,6 +299,9 @@ typedef struct lh_container_vtable {
                                 void* ctx);
 } lh_container_vtable_t;
 
+/* Element handle -- borrowed pointer, valid while the parent document is alive */
+typedef struct lh_element lh_element_t;
+
 /* --------------------------------------------------------------------------
  * Document lifecycle
  * -------------------------------------------------------------------------- */
@@ -306,6 +324,24 @@ void  lh_document_draw(lh_document_t* doc,
 
 float lh_document_width(const lh_document_t* doc);
 float lh_document_height(const lh_document_t* doc);
+
+/* Add and immediately apply a CSS stylesheet to the document.
+   Requires a subsequent render() to update layout. */
+void lh_document_add_stylesheet(lh_document_t* doc,
+                                const char* css_text,
+                                const char* baseurl,
+                                const char* media);
+
+/* Get the root element of the document. Returns NULL if doc is NULL. */
+lh_element_t* lh_document_root(lh_document_t* doc);
+
+/* Parse an HTML fragment and append the resulting elements as children of parent.
+   If replace_existing is non-zero, existing children are removed first.
+   Requires a subsequent render() to update layout. */
+void lh_document_append_children_from_string(lh_document_t* doc,
+                                              lh_element_t* parent,
+                                              const char* html,
+                                              int replace_existing);
 
 /* --------------------------------------------------------------------------
  * Mouse / interaction
