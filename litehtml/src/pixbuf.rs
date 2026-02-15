@@ -53,8 +53,8 @@ impl PixbufContainer {
     ///
     /// Initializes a transparent pixmap and loads system fonts via cosmic-text.
     pub fn new(width: u32, height: u32) -> Self {
-        let pixmap = tiny_skia::Pixmap::new(width.max(1), height.max(1))
-            .expect("failed to create pixmap");
+        let pixmap =
+            tiny_skia::Pixmap::new(width.max(1), height.max(1)).expect("failed to create pixmap");
         Self {
             pixmap,
             font_system: RefCell::new(cosmic_text::FontSystem::new()),
@@ -119,8 +119,8 @@ impl PixbufContainer {
 
     /// Resize the pixmap, clearing all existing content.
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.pixmap = tiny_skia::Pixmap::new(width.max(1), height.max(1))
-            .expect("failed to create pixmap");
+        self.pixmap =
+            tiny_skia::Pixmap::new(width.max(1), height.max(1)).expect("failed to create pixmap");
         self.viewport.width = width as f32;
         self.viewport.height = height as f32;
     }
@@ -146,20 +146,9 @@ impl PixbufContainer {
         // Intersect each clip rect
         for (pos, radii) in &self.clip_stack {
             let mut clip_mask = tiny_skia::Mask::new(w, h)?;
-            let path = build_rounded_rect_path(
-                pos.x,
-                pos.y,
-                pos.width,
-                pos.height,
-                radii,
-            );
+            let path = build_rounded_rect_path(pos.x, pos.y, pos.width, pos.height, radii);
             if let Some(path) = path {
-                clip_mask.fill_path(
-                    &path,
-                    FillRule::Winding,
-                    true,
-                    Transform::identity(),
-                );
+                clip_mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
             }
             // Intersect: combine masks by taking minimum
             intersect_masks(&mut mask, &clip_mask);
@@ -206,10 +195,7 @@ impl PixbufContainer {
         buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
         buffer.shape_until_scroll(&mut fs, false);
 
-        buffer
-            .layout_runs()
-            .map(|run| run.line_w)
-            .sum::<f32>()
+        buffer.layout_runs().map(|run| run.line_w).sum::<f32>()
     }
 }
 
@@ -332,12 +318,8 @@ fn color_points_to_stops(points: &[ColorPoint]) -> Vec<GradientStop> {
         .iter()
         .map(|cp| {
             let pos = cp.offset.clamp(0.0, 1.0);
-            let color = tiny_skia::Color::from_rgba8(
-                cp.color.r,
-                cp.color.g,
-                cp.color.b,
-                cp.color.a,
-            );
+            let color =
+                tiny_skia::Color::from_rgba8(cp.color.r, cp.color.g, cp.color.b, cp.color.a);
             GradientStop::new(pos, color)
         })
         .collect()
@@ -371,10 +353,7 @@ impl DocumentContainer for PixbufContainer {
             name => Family::Name(name),
         };
 
-        let attrs = Attrs::new()
-            .family(font_family)
-            .weight(weight)
-            .style(style);
+        let attrs = Attrs::new().family(font_family).weight(weight).style(style);
 
         let mut fs = self.font_system.borrow_mut();
 
@@ -466,7 +445,11 @@ impl DocumentContainer for PixbufContainer {
 
         let mut fs = self.font_system.borrow_mut();
         let mut buffer = cosmic_text::Buffer::new(&mut fs, ct_metrics);
-        buffer.set_size(&mut fs, Some(pos.width.max(f32::MAX / 2.0)), Some(line_height));
+        buffer.set_size(
+            &mut fs,
+            Some(pos.width.max(f32::MAX / 2.0)),
+            Some(line_height),
+        );
         buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
         buffer.shape_until_scroll(&mut fs, false);
 
@@ -631,12 +614,8 @@ impl DocumentContainer for PixbufContainer {
             2 => {
                 // Square: filled rectangle
                 if let Some(rect) = Rect::from_xywh(pos.x, pos.y, pos.width, pos.height) {
-                    self.pixmap.fill_rect(
-                        rect,
-                        &paint,
-                        Transform::identity(),
-                        mask.as_ref(),
-                    );
+                    self.pixmap
+                        .fill_rect(rect, &paint, Transform::identity(), mask.as_ref());
                 }
             }
             _ => {
@@ -688,9 +667,7 @@ impl DocumentContainer for PixbufContainer {
             let h = self.pixmap.height();
             let mut m = tiny_skia::Mask::new(w, h);
             if let Some(ref mut m) = m {
-                if let Some(rect) =
-                    Rect::from_xywh(clip.x, clip.y, clip.width, clip.height)
-                {
+                if let Some(rect) = Rect::from_xywh(clip.x, clip.y, clip.width, clip.height) {
                     m.fill_path(
                         &PathBuilder::from_rect(rect),
                         FillRule::Winding,
@@ -763,14 +740,8 @@ impl DocumentContainer for PixbufContainer {
         }
 
         let shader = tiny_skia::LinearGradient::new(
-            tiny_skia::Point::from_xy(
-                border.x + start.x,
-                border.y + start.y,
-            ),
-            tiny_skia::Point::from_xy(
-                border.x + end.x,
-                border.y + end.y,
-            ),
+            tiny_skia::Point::from_xy(border.x + start.x, border.y + start.y),
+            tiny_skia::Point::from_xy(border.x + end.x, border.y + end.y),
             stops,
             SpreadMode::Pad,
             Transform::identity(),
@@ -783,13 +754,9 @@ impl DocumentContainer for PixbufContainer {
                 ..Paint::default()
             };
 
-            if let Some(path) = build_rounded_rect_path(
-                border.x,
-                border.y,
-                border.width,
-                border.height,
-                &radii,
-            ) {
+            if let Some(path) =
+                build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
+            {
                 self.pixmap.fill_path(
                     &path,
                     &paint,
@@ -842,13 +809,9 @@ impl DocumentContainer for PixbufContainer {
                 ..Paint::default()
             };
 
-            if let Some(path) = build_rounded_rect_path(
-                border.x,
-                border.y,
-                border.width,
-                border.height,
-                &radii,
-            ) {
+            if let Some(path) =
+                build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
+            {
                 self.pixmap.fill_path(
                     &path,
                     &paint,
@@ -1082,8 +1045,12 @@ fn draw_border_side(
     };
 
     match border.style {
-        BorderStyle::Solid | BorderStyle::Double | BorderStyle::Groove | BorderStyle::Ridge
-        | BorderStyle::Inset | BorderStyle::Outset => {
+        BorderStyle::Solid
+        | BorderStyle::Double
+        | BorderStyle::Groove
+        | BorderStyle::Ridge
+        | BorderStyle::Inset
+        | BorderStyle::Outset => {
             if let Some(rect) = Rect::from_xywh(x, y, w.max(0.001), h.max(0.001)) {
                 pixmap.fill_rect(rect, &paint, Transform::identity(), mask);
             }

@@ -162,8 +162,9 @@ fn build_system(out_dir: &PathBuf, csrc_dir: &PathBuf) {
         (dir.join("include"), dir.join("lib"))
     } else {
         // Search LIBRARY_PATH / C_INCLUDE_PATH (set by GUIX, Nix, etc.)
-        let include_dir = find_header("litehtml.h")
-            .expect("Cannot find litehtml headers. Set LITEHTML_DIR or enable the `vendored` feature.");
+        let include_dir = find_header("litehtml.h").expect(
+            "Cannot find litehtml headers. Set LITEHTML_DIR or enable the `vendored` feature.",
+        );
         let lib_dir = find_library("liblitehtml.a")
             .expect("Cannot find liblitehtml. Set LITEHTML_DIR or enable the `vendored` feature.");
         (include_dir, lib_dir)
@@ -237,7 +238,12 @@ fn find_library(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn generate_bindings(csrc_dir: &PathBuf, out_dir: &PathBuf, vendored: bool, manifest_dir: &PathBuf) {
+fn generate_bindings(
+    csrc_dir: &PathBuf,
+    out_dir: &PathBuf,
+    vendored: bool,
+    manifest_dir: &PathBuf,
+) {
     let mut builder = bindgen::Builder::default()
         .header(csrc_dir.join("litehtml_c.h").to_str().unwrap())
         .allowlist_function("lh_.*")

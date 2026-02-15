@@ -1156,9 +1156,7 @@ unsafe extern "C" fn cb_draw_conic_gradient(
         let bridge = bridge_from_user_data(user_data);
         let layer = BackgroundLayer::from_ptr(layer);
         let gradient = ConicGradient::from_ptr(gradient);
-        bridge
-            .container
-            .draw_conic_gradient(hdc, &layer, &gradient);
+        bridge.container.draw_conic_gradient(hdc, &layer, &gradient);
     }));
 }
 
@@ -1212,7 +1210,9 @@ unsafe extern "C" fn cb_on_anchor_click(user_data: *mut c_void, url: *const c_ch
 unsafe extern "C" fn cb_on_mouse_event(user_data: *mut c_void, event: c_int) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
-        bridge.container.on_mouse_event(MouseEvent::from_c_int(event));
+        bridge
+            .container
+            .on_mouse_event(MouseEvent::from_c_int(event));
     }));
 }
 
@@ -1451,9 +1451,7 @@ impl<'a> Document<'a> {
     /// the clip rectangle is drawn.
     pub fn draw(&mut self, hdc: usize, x: f32, y: f32, clip: Option<Position>) {
         let clip_c = clip.map(sys::lh_position_t::from);
-        let clip_ptr = clip_c
-            .as_ref()
-            .map_or(std::ptr::null(), |c| c as *const _);
+        let clip_ptr = clip_c.as_ref().map_or(std::ptr::null(), |c| c as *const _);
         unsafe {
             sys::lh_document_draw(self.raw, hdc, x, y, clip_ptr);
         }
@@ -1471,37 +1469,19 @@ impl<'a> Document<'a> {
 
     /// Notify the document of a mouse-move event. Returns `true` if the
     /// cursor or element states changed (i.e. a redraw is needed).
-    pub fn on_mouse_over(
-        &mut self,
-        x: f32,
-        y: f32,
-        client_x: f32,
-        client_y: f32,
-    ) -> bool {
+    pub fn on_mouse_over(&mut self, x: f32, y: f32, client_x: f32, client_y: f32) -> bool {
         unsafe { sys::lh_document_on_mouse_over(self.raw, x, y, client_x, client_y) != 0 }
     }
 
     /// Notify the document of a left-button-down event. Returns `true` if
     /// a redraw is needed.
-    pub fn on_lbutton_down(
-        &mut self,
-        x: f32,
-        y: f32,
-        client_x: f32,
-        client_y: f32,
-    ) -> bool {
+    pub fn on_lbutton_down(&mut self, x: f32, y: f32, client_x: f32, client_y: f32) -> bool {
         unsafe { sys::lh_document_on_lbutton_down(self.raw, x, y, client_x, client_y) != 0 }
     }
 
     /// Notify the document of a left-button-up event. Returns `true` if
     /// a redraw is needed.
-    pub fn on_lbutton_up(
-        &mut self,
-        x: f32,
-        y: f32,
-        client_x: f32,
-        client_y: f32,
-    ) -> bool {
+    pub fn on_lbutton_up(&mut self, x: f32, y: f32, client_x: f32, client_y: f32) -> bool {
         unsafe { sys::lh_document_on_lbutton_up(self.raw, x, y, client_x, client_y) != 0 }
     }
 
@@ -1613,13 +1593,7 @@ mod tests {
         ) {
         }
 
-        fn draw_solid_fill(
-            &mut self,
-            _hdc: usize,
-            _layer: &BackgroundLayer,
-            _color: Color,
-        ) {
-        }
+        fn draw_solid_fill(&mut self, _hdc: usize, _layer: &BackgroundLayer, _color: Color) {}
 
         fn draw_linear_gradient(
             &mut self,
@@ -1738,8 +1712,7 @@ mod tests {
     #[test]
     fn test_media_changed() {
         let mut container = TestContainer::new();
-        let mut doc =
-            Document::from_html("<p>Test</p>", &mut container, None, None).unwrap();
+        let mut doc = Document::from_html("<p>Test</p>", &mut container, None, None).unwrap();
         doc.render(800.0);
         let _ = doc.media_changed();
     }
@@ -1927,11 +1900,20 @@ mod tests {
             let prepared = crate::email::prepare_email_html(html, None, None);
 
             // Sanitization: no dangerous elements should exist
-            assert!(!prepared.html.contains("<script"), "script tags must be stripped");
-            assert!(!prepared.html.contains("onclick"), "event handlers must be stripped");
+            assert!(
+                !prepared.html.contains("<script"),
+                "script tags must be stripped"
+            );
+            assert!(
+                !prepared.html.contains("onclick"),
+                "event handlers must be stripped"
+            );
 
             // data: URI image should have been resolved
-            assert!(!prepared.images.is_empty(), "data: URI image should be extracted");
+            assert!(
+                !prepared.images.is_empty(),
+                "data: URI image should be extracted"
+            );
 
             let pixels = crate::pixbuf::render_to_rgba(&prepared.html, 600, 800);
             assert_eq!(pixels.len(), 600 * 800 * 4, "pixel buffer size mismatch");
@@ -1939,8 +1921,13 @@ mod tests {
             let has_opaque = pixels.chunks(4).any(|px| px[3] > 0);
             assert!(has_opaque, "render should produce non-transparent pixels");
 
-            let has_non_white = pixels.chunks(4).any(|px| px[3] > 0 && (px[0] < 250 || px[1] < 250 || px[2] < 250));
-            assert!(has_non_white, "render should contain non-white pixels from actual content");
+            let has_non_white = pixels
+                .chunks(4)
+                .any(|px| px[3] > 0 && (px[0] < 250 || px[1] < 250 || px[2] < 250));
+            assert!(
+                has_non_white,
+                "render should contain non-white pixels from actual content"
+            );
         }
 
         #[cfg(feature = "email")]
@@ -1986,11 +1973,20 @@ mod tests {
 
             let prepared = crate::email::prepare_email_html(html, None, None);
 
-            assert!(!prepared.html.contains("<script"), "script tags must be stripped");
-            assert!(!prepared.html.contains("onerror"), "event handlers must be stripped");
+            assert!(
+                !prepared.html.contains("<script"),
+                "script tags must be stripped"
+            );
+            assert!(
+                !prepared.html.contains("onerror"),
+                "event handlers must be stripped"
+            );
 
             // The style block should be preserved
-            assert!(prepared.html.contains("<style>"), "style block should be preserved");
+            assert!(
+                prepared.html.contains("<style>"),
+                "style block should be preserved"
+            );
 
             let pixels = crate::pixbuf::render_to_rgba(&prepared.html, 600, 800);
             assert_eq!(pixels.len(), 600 * 800 * 4, "pixel buffer size mismatch");
@@ -1998,8 +1994,13 @@ mod tests {
             let has_opaque = pixels.chunks(4).any(|px| px[3] > 0);
             assert!(has_opaque, "render should produce non-transparent pixels");
 
-            let has_non_white = pixels.chunks(4).any(|px| px[3] > 0 && (px[0] < 250 || px[1] < 250 || px[2] < 250));
-            assert!(has_non_white, "render should contain non-white pixels from actual content");
+            let has_non_white = pixels
+                .chunks(4)
+                .any(|px| px[3] > 0 && (px[0] < 250 || px[1] < 250 || px[2] < 250));
+            assert!(
+                has_non_white,
+                "render should contain non-white pixels from actual content"
+            );
         }
 
         #[cfg(feature = "email")]
@@ -2058,19 +2059,40 @@ mod tests {
             let prepared = crate::email::prepare_email_html(html, None, None);
 
             // Script tag and its contents must be stripped
-            assert!(!prepared.html.contains("<script"), "script tags must be stripped");
-            assert!(!prepared.html.contains("document.write"), "script contents must be stripped");
+            assert!(
+                !prepared.html.contains("<script"),
+                "script tags must be stripped"
+            );
+            assert!(
+                !prepared.html.contains("document.write"),
+                "script contents must be stripped"
+            );
 
             // Event handler attributes must be stripped
-            assert!(!prepared.html.contains("onclick"), "onclick must be stripped");
-            assert!(!prepared.html.contains("onmouseover"), "onmouseover must be stripped");
+            assert!(
+                !prepared.html.contains("onclick"),
+                "onclick must be stripped"
+            );
+            assert!(
+                !prepared.html.contains("onmouseover"),
+                "onmouseover must be stripped"
+            );
 
             // MSO conditional comments should pass through (they're just HTML comments)
-            assert!(prepared.html.contains("<!--[if mso]>"), "MSO comments should be preserved");
+            assert!(
+                prepared.html.contains("<!--[if mso]>"),
+                "MSO comments should be preserved"
+            );
 
             // Normal content preserved
-            assert!(prepared.html.contains("Newsletter Title"), "heading text must be preserved");
-            assert!(prepared.html.contains("Article Title"), "article text must be preserved");
+            assert!(
+                prepared.html.contains("Newsletter Title"),
+                "heading text must be preserved"
+            );
+            assert!(
+                prepared.html.contains("Article Title"),
+                "article text must be preserved"
+            );
 
             let pixels = crate::pixbuf::render_to_rgba(&prepared.html, 600, 800);
             assert_eq!(pixels.len(), 600 * 800 * 4, "pixel buffer size mismatch");
@@ -2078,8 +2100,13 @@ mod tests {
             let has_opaque = pixels.chunks(4).any(|px| px[3] > 0);
             assert!(has_opaque, "render should produce non-transparent pixels");
 
-            let has_non_white = pixels.chunks(4).any(|px| px[3] > 0 && (px[0] < 250 || px[1] < 250 || px[2] < 250));
-            assert!(has_non_white, "render should contain non-white pixels from actual content");
+            let has_non_white = pixels
+                .chunks(4)
+                .any(|px| px[3] > 0 && (px[0] < 250 || px[1] < 250 || px[2] < 250));
+            assert!(
+                has_non_white,
+                "render should contain non-white pixels from actual content"
+            );
         }
     }
 }

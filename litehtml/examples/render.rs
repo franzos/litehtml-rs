@@ -39,12 +39,17 @@ fn main() {
     container.resize(width, content_height);
     if let Some(mut doc) = Document::from_html(&html, &mut container, None, None) {
         doc.render(width as f32);
-        doc.draw(0, 0.0, 0.0, Some(Position {
-            x: 0.0,
-            y: 0.0,
-            width: width as f32,
-            height: content_height as f32,
-        }));
+        doc.draw(
+            0,
+            0.0,
+            0.0,
+            Some(Position {
+                x: 0.0,
+                y: 0.0,
+                width: width as f32,
+                height: content_height as f32,
+            }),
+        );
     }
 
     // Convert RGBA to minifb's 0xRRGGBB u32 format, blended against white
@@ -109,9 +114,13 @@ fn main() {
         if visible.len() < (win_height as usize * width as usize) {
             let mut padded = visible.to_vec();
             padded.resize(win_height as usize * width as usize, 0x00FFFFFF);
-            window.update_with_buffer(&padded, width as usize, win_height as usize).unwrap();
+            window
+                .update_with_buffer(&padded, width as usize, win_height as usize)
+                .unwrap();
         } else {
-            window.update_with_buffer(visible, width as usize, win_height as usize).unwrap();
+            window
+                .update_with_buffer(visible, width as usize, win_height as usize)
+                .unwrap();
         }
     }
 }

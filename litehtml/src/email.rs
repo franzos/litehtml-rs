@@ -95,7 +95,9 @@ fn detect_meta_charset(html: &str) -> Option<&'static Encoding> {
             (&inner[..end], &inner[end..])
         } else {
             let end = rest
-                .find(|c: char| c.is_ascii_whitespace() || c == '"' || c == '\'' || c == ';' || c == '>')
+                .find(|c: char| {
+                    c.is_ascii_whitespace() || c == '"' || c == '\'' || c == ';' || c == '>'
+                })
                 .unwrap_or(rest.len());
             (&rest[..end], &rest[end..])
         };
@@ -266,10 +268,7 @@ fn is_stylesheet_link(tag_content: &str) -> bool {
     false
 }
 
-fn advance_past(
-    chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>,
-    target: usize,
-) {
+fn advance_past(chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>, target: usize) {
     while let Some(&(j, _)) = chars.peek() {
         if j >= target {
             break;
@@ -305,7 +304,10 @@ fn skip_until_close_tag(
             }
         } else if rest.starts_with(&open_pattern) {
             let after = &rest[open_pattern.len()..];
-            if after.starts_with('>') || after.starts_with(char::is_whitespace) || after.starts_with('/') {
+            if after.starts_with('>')
+                || after.starts_with(char::is_whitespace)
+                || after.starts_with('/')
+            {
                 depth += 1;
             }
         }
@@ -332,7 +334,8 @@ fn strip_event_handlers(tag: &str) -> String {
         j += 1;
     }
     // Skip tag name
-    while j < bytes.len() && !bytes[j].is_ascii_whitespace() && bytes[j] != b'>' && bytes[j] != b'/' {
+    while j < bytes.len() && !bytes[j].is_ascii_whitespace() && bytes[j] != b'>' && bytes[j] != b'/'
+    {
         j += 1;
     }
 
@@ -353,7 +356,12 @@ fn strip_event_handlers(tag: &str) -> String {
 
             // Read attribute name
             let attr_start = i;
-            while i < bytes.len() && bytes[i] != b'=' && !bytes[i].is_ascii_whitespace() && bytes[i] != b'>' && bytes[i] != b'/' {
+            while i < bytes.len()
+                && bytes[i] != b'='
+                && !bytes[i].is_ascii_whitespace()
+                && bytes[i] != b'>'
+                && bytes[i] != b'/'
+            {
                 i += 1;
             }
             let attr_name = &tag[attr_start..i];
@@ -393,7 +401,10 @@ fn strip_event_handlers(tag: &str) -> String {
                     }
                 } else {
                     // Unquoted value
-                    while temp < bytes.len() && !bytes[temp].is_ascii_whitespace() && bytes[temp] != b'>' {
+                    while temp < bytes.len()
+                        && !bytes[temp].is_ascii_whitespace()
+                        && bytes[temp] != b'>'
+                    {
                         temp += 1;
                     }
                 }
@@ -453,10 +464,7 @@ fn percent_decode(input: &str) -> Vec<u8> {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(hi), Some(lo)) = (
-                hex_val(bytes[i + 1]),
-                hex_val(bytes[i + 2]),
-            ) {
+            if let (Some(hi), Some(lo)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
                 result.push(hi << 4 | lo);
                 i += 3;
                 continue;
@@ -547,13 +555,23 @@ fn preprocess_body_bgcolor(html: &str) -> String {
     let (value, attr_end_offset) = if rest.starts_with('"') {
         let inner = &rest[1..];
         let end = inner.find('"').unwrap_or(inner.len());
-        (&tag[bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1..bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1 + end], end + 2)
+        (
+            &tag[bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1
+                ..bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1 + end],
+            end + 2,
+        )
     } else if rest.starts_with('\'') {
         let inner = &rest[1..];
         let end = inner.find('\'').unwrap_or(inner.len());
-        (&tag[bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1..bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1 + end], end + 2)
+        (
+            &tag[bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1
+                ..bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1 + end],
+            end + 2,
+        )
     } else {
-        let end = rest.find(|c: char| c.is_ascii_whitespace() || c == '>').unwrap_or(rest.len());
+        let end = rest
+            .find(|c: char| c.is_ascii_whitespace() || c == '>')
+            .unwrap_or(rest.len());
         let offset = tag_lower.len() - bg_pos - 7 - rest.len();
         (&tag[bg_pos + 7 + offset..bg_pos + 7 + offset + end], end)
     };
@@ -660,15 +678,28 @@ fn preprocess_cellpadding(html: &str) -> String {
         let (value, _val_len) = if rest.starts_with('"') {
             let inner = &rest[1..];
             let end = inner.find('"').unwrap_or(inner.len());
-            (&html[abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1..abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1 + end], end + 2)
+            (
+                &html[abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1
+                    ..abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1 + end],
+                end + 2,
+            )
         } else if rest.starts_with('\'') {
             let inner = &rest[1..];
             let end = inner.find('\'').unwrap_or(inner.len());
-            (&html[abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1..abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1 + end], end + 2)
+            (
+                &html[abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1
+                    ..abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1 + end],
+                end + 2,
+            )
         } else {
-            let end = rest.find(|c: char| c.is_ascii_whitespace() || c == '>').unwrap_or(rest.len());
+            let end = rest
+                .find(|c: char| c.is_ascii_whitespace() || c == '>')
+                .unwrap_or(rest.len());
             let offset = lower.len() - abs_pos - 11 - rest.len();
-            (&html[abs_pos + 11 + offset..abs_pos + 11 + offset + end], end)
+            (
+                &html[abs_pos + 11 + offset..abs_pos + 11 + offset + end],
+                end,
+            )
         };
 
         let padding = value.trim();
@@ -705,7 +736,8 @@ fn preprocess_cellpadding(html: &str) -> String {
             }
             attr_end += 1;
         } else {
-            while attr_end < tb.len() && !tb[attr_end].is_ascii_whitespace() && tb[attr_end] != b'>' {
+            while attr_end < tb.len() && !tb[attr_end].is_ascii_whitespace() && tb[attr_end] != b'>'
+            {
                 attr_end += 1;
             }
         }
@@ -914,7 +946,8 @@ mod tests {
 
     #[test]
     fn sanitize_strips_form_elements() {
-        let html = "<form action=\"/submit\"><input type=\"text\"><button>Go</button></form><p>After</p>";
+        let html =
+            "<form action=\"/submit\"><input type=\"text\"><button>Go</button></form><p>After</p>";
         let result = sanitize_html(html);
         assert!(!result.contains("form"));
         assert!(!result.contains("input"));
@@ -1060,7 +1093,9 @@ mod tests {
     #[test]
     fn prepare_email_with_encoding() {
         // Windows-1252 encoded with meta charset
-        let html = b"<html><head><meta charset=\"windows-1252\"></head><body>\x93Hello\x94</body></html>".to_vec();
+        let html =
+            b"<html><head><meta charset=\"windows-1252\"></head><body>\x93Hello\x94</body></html>"
+                .to_vec();
         let prepared = prepare_email_html(&html, None, None);
         assert!(prepared.html.contains('\u{201c}'));
         assert!(prepared.html.contains('\u{201d}'));
