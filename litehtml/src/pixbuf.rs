@@ -445,11 +445,11 @@ impl DocumentContainer for PixbufContainer {
 
         let mut fs = self.font_system.borrow_mut();
         let mut buffer = cosmic_text::Buffer::new(&mut fs, ct_metrics);
-        buffer.set_size(
-            &mut fs,
-            Some(pos.width.min(f32::MAX / 2.0)),
-            Some(line_height),
-        );
+        // Use unconstrained width so cosmic-text doesn't re-wrap. litehtml
+        // already sized and positioned each text run; rounding in pos.round()
+        // can shave fractional pixels off pos.width, causing the last glyph(s)
+        // to wrap onto an invisible second line.
+        buffer.set_size(&mut fs, Some(f32::MAX), Some(line_height));
         buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
         buffer.shape_until_scroll(&mut fs, false);
 
