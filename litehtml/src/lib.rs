@@ -15,6 +15,43 @@ use log::warn;
 pub use litehtml_sys as sys;
 
 // ---------------------------------------------------------------------------
+// Error types
+// ---------------------------------------------------------------------------
+
+/// Error returned by [`Document::from_html`] when document creation fails.
+#[derive(Debug)]
+pub enum CreateError {
+    /// The input HTML or CSS string contained an interior null byte.
+    InvalidString(std::ffi::NulError),
+    /// The litehtml C++ engine returned a null document pointer.
+    CreateFailed,
+}
+
+impl std::fmt::Display for CreateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidString(e) => write!(f, "string contains interior null byte: {e}"),
+            Self::CreateFailed => write!(f, "litehtml failed to create document"),
+        }
+    }
+}
+
+impl std::error::Error for CreateError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidString(e) => Some(e),
+            Self::CreateFailed => None,
+        }
+    }
+}
+
+impl From<std::ffi::NulError> for CreateError {
+    fn from(e: std::ffi::NulError) -> Self {
+        Self::InvalidString(e)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Safe Rust value types
 // ---------------------------------------------------------------------------
 
@@ -32,6 +69,12 @@ pub struct Size {
     pub height: f32,
 }
 
+/// RGBA color value.
+///
+/// Note: litehtml's C++ `web_color` type carries an `is_current_color` flag
+/// (for the CSS `currentColor` keyword). This flag is **not** preserved here
+/// because litehtml resolves `currentColor` to a concrete RGBA value during
+/// CSS property computation, before passing colors to container callbacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color {
     pub r: u8,
@@ -857,7 +900,7 @@ pub trait DocumentContainer {
     }
 
     /// Draw a list item marker (bullet, number, etc.).
-    fn draw_list_marker(&mut self, hdc: usize, marker: &ListMarker);
+    fn draw_list_marker(&mut self, hdc: usize, marker: &ListMarker) {}
 
     /// Notify the container that an image should be loaded.
     fn load_image(&mut self, src: &str, baseurl: &str, redraw_on_ready: bool);
@@ -896,25 +939,25 @@ pub trait DocumentContainer {
     );
 
     /// Draw element borders.
-    fn draw_borders(&mut self, hdc: usize, borders: &Borders, draw_pos: Position, root: bool);
+    fn draw_borders(&mut self, hdc: usize, borders: &Borders, draw_pos: Position, root: bool) {}
 
     /// Set the document title.
-    fn set_caption(&mut self, caption: &str);
+    fn set_caption(&mut self, caption: &str) {}
 
     /// Set the document base URL.
-    fn set_base_url(&mut self, base_url: &str);
+    fn set_base_url(&mut self, base_url: &str) {}
 
     /// Called when a `<link>` element is encountered.
     fn link(&mut self) {}
 
     /// Called when the user clicks an anchor element.
-    fn on_anchor_click(&mut self, url: &str);
+    fn on_anchor_click(&mut self, url: &str) {}
 
     /// Called on mouse enter/leave events.
     fn on_mouse_event(&mut self, event: MouseEvent) {}
 
     /// Set the mouse cursor style.
-    fn set_cursor(&mut self, cursor: &str);
+    fn set_cursor(&mut self, cursor: &str) {}
 
     /// Transform text according to CSS `text-transform`. Returns the
     /// transformed string.
@@ -928,10 +971,10 @@ pub trait DocumentContainer {
     }
 
     /// Push a clipping rectangle onto the clip stack.
-    fn set_clip(&mut self, pos: Position, radius: BorderRadiuses);
+    fn set_clip(&mut self, pos: Position, radius: BorderRadiuses) {}
 
     /// Pop the most recent clipping rectangle.
-    fn del_clip(&mut self);
+    fn del_clip(&mut self) {}
 
     /// Return the current viewport rectangle.
     fn get_viewport(&self) -> Position;
@@ -1399,40 +1442,40 @@ unsafe extern "C" fn cb_get_language(
     }));
 }
 
-/// Build a fully populated vtable pointing to the callback bridge functions.
-fn build_vtable() -> sys::lh_container_vtable_t {
-    sys::lh_container_vtable_t {
-        create_font: Some(cb_create_font),
-        delete_font: Some(cb_delete_font),
-        text_width: Some(cb_text_width),
-        draw_text: Some(cb_draw_text),
-        pt_to_px: Some(cb_pt_to_px),
-        get_default_font_size: Some(cb_get_default_font_size),
-        get_default_font_name: Some(cb_get_default_font_name),
-        draw_list_marker: Some(cb_draw_list_marker),
-        load_image: Some(cb_load_image),
-        get_image_size: Some(cb_get_image_size),
-        draw_image: Some(cb_draw_image),
-        draw_solid_fill: Some(cb_draw_solid_fill),
-        draw_linear_gradient: Some(cb_draw_linear_gradient),
-        draw_radial_gradient: Some(cb_draw_radial_gradient),
-        draw_conic_gradient: Some(cb_draw_conic_gradient),
-        draw_borders: Some(cb_draw_borders),
-        set_caption: Some(cb_set_caption),
-        set_base_url: Some(cb_set_base_url),
-        link: Some(cb_link),
-        on_anchor_click: Some(cb_on_anchor_click),
-        on_mouse_event: Some(cb_on_mouse_event),
-        set_cursor: Some(cb_set_cursor),
-        transform_text: Some(cb_transform_text),
-        import_css: Some(cb_import_css),
-        set_clip: Some(cb_set_clip),
-        del_clip: Some(cb_del_clip),
-        get_viewport: Some(cb_get_viewport),
-        get_media_features: Some(cb_get_media_features),
-        get_language: Some(cb_get_language),
-    }
-}
+/// Single shared vtable for all Document instances. Every field is a
+/// compile-time-constant function pointer; per-document state is carried
+/// through `user_data`, not the vtable.
+static CONTAINER_VTABLE: sys::lh_container_vtable_t = sys::lh_container_vtable_t {
+    create_font: Some(cb_create_font),
+    delete_font: Some(cb_delete_font),
+    text_width: Some(cb_text_width),
+    draw_text: Some(cb_draw_text),
+    pt_to_px: Some(cb_pt_to_px),
+    get_default_font_size: Some(cb_get_default_font_size),
+    get_default_font_name: Some(cb_get_default_font_name),
+    draw_list_marker: Some(cb_draw_list_marker),
+    load_image: Some(cb_load_image),
+    get_image_size: Some(cb_get_image_size),
+    draw_image: Some(cb_draw_image),
+    draw_solid_fill: Some(cb_draw_solid_fill),
+    draw_linear_gradient: Some(cb_draw_linear_gradient),
+    draw_radial_gradient: Some(cb_draw_radial_gradient),
+    draw_conic_gradient: Some(cb_draw_conic_gradient),
+    draw_borders: Some(cb_draw_borders),
+    set_caption: Some(cb_set_caption),
+    set_base_url: Some(cb_set_base_url),
+    link: Some(cb_link),
+    on_anchor_click: Some(cb_on_anchor_click),
+    on_mouse_event: Some(cb_on_mouse_event),
+    set_cursor: Some(cb_set_cursor),
+    transform_text: Some(cb_transform_text),
+    import_css: Some(cb_import_css),
+    set_clip: Some(cb_set_clip),
+    del_clip: Some(cb_del_clip),
+    get_viewport: Some(cb_get_viewport),
+    get_media_features: Some(cb_get_media_features),
+    get_language: Some(cb_get_language),
+};
 
 // ---------------------------------------------------------------------------
 // Document
@@ -1443,10 +1486,18 @@ fn build_vtable() -> sys::lh_container_vtable_t {
 ///
 /// `Document` is intentionally `!Send` and `!Sync` because the underlying
 /// C++ engine is single-threaded.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<litehtml::Document<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<litehtml::Document<'static>>();
+/// ```
 pub struct Document<'a> {
     raw: *mut sys::lh_document_t,
-    /// Kept alive so the vtable pointer inside litehtml remains valid.
-    vtable: *mut sys::lh_container_vtable_t,
     /// Kept alive so the user_data pointer inside litehtml remains valid.
     bridge: *mut BridgeData<'a>,
 }
@@ -1455,22 +1506,23 @@ impl<'a> Document<'a> {
     /// Parse HTML into a document, using `container` for all rendering
     /// callbacks.
     ///
-    /// Returns `None` if litehtml fails to create the document (e.g.
-    /// completely empty input after null-termination issues).
+    /// Returns an error if the input strings contain interior null bytes
+    /// or if litehtml fails to create the document.
     ///
     /// `master_css` is the user-agent stylesheet applied before any document
     /// styles. `user_styles` are additional CSS rules applied after the
     /// document styles.
+    #[must_use = "document must be stored for rendering"]
     pub fn from_html(
         html: &str,
         container: &'a mut dyn DocumentContainer,
         master_css: Option<&str>,
         user_styles: Option<&str>,
-    ) -> Option<Self> {
-        let c_html = CString::new(html).ok()?;
+    ) -> Result<Self, CreateError> {
+        let c_html = CString::new(html)?;
 
-        let c_master_css = master_css.and_then(|s| CString::new(s).ok());
-        let c_user_styles = user_styles.and_then(|s| CString::new(s).ok());
+        let c_master_css = master_css.map(CString::new).transpose()?;
+        let c_user_styles = user_styles.map(CString::new).transpose()?;
 
         let master_css_ptr = c_master_css
             .as_ref()
@@ -1491,8 +1543,10 @@ impl<'a> Document<'a> {
         };
         let bridge_ptr = Box::into_raw(Box::new(bridge_data));
 
-        let vtable = build_vtable();
-        let vtable_ptr = Box::into_raw(Box::new(vtable));
+        // SAFETY: the C++ side only reads through this pointer (never writes).
+        // See CDocumentContainer in litehtml_c.cpp — all vtable access is read-only.
+        let vtable_ptr =
+            std::ptr::addr_of!(CONTAINER_VTABLE) as *mut sys::lh_container_vtable_t;
 
         let raw = unsafe {
             sys::lh_document_create_from_string(
@@ -1505,23 +1559,21 @@ impl<'a> Document<'a> {
         };
 
         if raw.is_null() {
-            // Clean up allocations on failure
             unsafe {
-                drop(Box::from_raw(vtable_ptr));
                 drop(Box::from_raw(bridge_ptr));
             }
-            return None;
+            return Err(CreateError::CreateFailed);
         }
 
-        Some(Self {
+        Ok(Self {
             raw,
-            vtable: vtable_ptr,
             bridge: bridge_ptr,
         })
     }
 
     /// Lay out the document within `max_width` pixels. Returns the actual
     /// content width after layout.
+    #[must_use = "returns the content width after layout"]
     pub fn render(&mut self, max_width: f32) -> f32 {
         unsafe { sys::lh_document_render(self.raw, max_width) }
     }
@@ -1582,11 +1634,9 @@ impl<'a> Document<'a> {
 impl Drop for Document<'_> {
     fn drop(&mut self) {
         unsafe {
+            // Destroy the document first (it may call callbacks during teardown),
+            // then free the bridge data.
             sys::lh_document_destroy(self.raw);
-            // Free the vtable and bridge allocations. Order matters: destroy
-            // the document first (it may call callbacks during teardown),
-            // then free the support structures.
-            drop(Box::from_raw(self.vtable));
             drop(Box::from_raw(self.bridge));
         }
     }
@@ -1748,7 +1798,7 @@ mod tests {
     fn test_parse_simple_html() {
         let mut container = TestContainer::new();
         let doc = Document::from_html("<p>Hello</p>", &mut container, None, None);
-        assert!(doc.is_some());
+        assert!(doc.is_ok());
     }
 
     #[test]
@@ -1756,7 +1806,7 @@ mod tests {
         let mut container = TestContainer::new();
         let mut doc =
             Document::from_html("<p>Hello world</p>", &mut container, None, None).unwrap();
-        doc.render(800.0);
+        let _ = doc.render(800.0);
         assert!(doc.width() > 0.0);
         assert!(doc.height() > 0.0);
     }
@@ -1767,7 +1817,7 @@ mod tests {
         let mut doc =
             Document::from_html("<h1>Title</h1><p>Body text</p>", &mut container, None, None)
                 .unwrap();
-        doc.render(800.0);
+        let _ = doc.render(800.0);
         let clip = Position {
             x: 0.0,
             y: 0.0,
@@ -1782,7 +1832,7 @@ mod tests {
         let mut container = TestContainer::new();
         let mut doc =
             Document::from_html("<a href=\"#\">Link</a>", &mut container, None, None).unwrap();
-        doc.render(800.0);
+        let _ = doc.render(800.0);
         let _ = doc.on_mouse_over(10.0, 10.0, 10.0, 10.0);
         let _ = doc.on_lbutton_down(10.0, 10.0, 10.0, 10.0);
         let _ = doc.on_lbutton_up(10.0, 10.0, 10.0, 10.0);
@@ -1793,7 +1843,7 @@ mod tests {
     fn test_media_changed() {
         let mut container = TestContainer::new();
         let mut doc = Document::from_html("<p>Test</p>", &mut container, None, None).unwrap();
-        doc.render(800.0);
+        let _ = doc.render(800.0);
         let _ = doc.media_changed();
     }
 
@@ -1802,7 +1852,7 @@ mod tests {
         let mut container = TestContainer::new();
         let css = "body { margin: 0; padding: 0; }";
         let doc = Document::from_html("<p>Styled</p>", &mut container, Some(css), None);
-        assert!(doc.is_some());
+        assert!(doc.is_ok());
     }
 
     #[test]
@@ -1810,7 +1860,7 @@ mod tests {
         let mut container = TestContainer::new();
         let user_css = "p { color: red; }";
         let doc = Document::from_html("<p>Red</p>", &mut container, None, Some(user_css));
-        assert!(doc.is_some());
+        assert!(doc.is_ok());
     }
 
     #[test]
@@ -1881,22 +1931,7 @@ mod tests {
         assert_eq!(m, back);
     }
 
-    #[test]
-    fn test_not_send_sync() {
-        // Compile-time assertion: Document should not be Send or Sync.
-        fn assert_not_send<T: Send>() {}
-        fn assert_not_sync<T: Sync>() {}
-
-        // These would fail to compile if uncommented, proving Document is
-        // !Send and !Sync:
-        // assert_not_send::<Document>();
-        // assert_not_sync::<Document>();
-
-        // Instead, we just verify the raw pointer fields exist (which is
-        // what prevents auto-impl of Send/Sync).
-        let _ = assert_not_send::<i32>;
-        let _ = assert_not_sync::<i32>;
-    }
+    // test_not_send_sync is now a compile_fail doc test on the Document struct.
 
     #[cfg(feature = "pixbuf")]
     mod pixbuf_tests {

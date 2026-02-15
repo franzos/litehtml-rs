@@ -1128,8 +1128,8 @@ fn build_circle_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
 /// lays it out, and draws it, returning the raw pixel data.
 pub fn render_to_rgba(html: &str, width: u32, height: u32) -> Vec<u8> {
     let mut container = PixbufContainer::new(width, height);
-    if let Some(mut doc) = crate::Document::from_html(html, &mut container, None, None) {
-        doc.render(width as f32);
+    if let Ok(mut doc) = crate::Document::from_html(html, &mut container, None, None) {
+        let _ = doc.render(width as f32);
         doc.draw(
             0,
             0.0,

@@ -27,8 +27,8 @@ fn main() {
     // Layout the document to get its actual content height
     let mut container = PixbufContainer::new(width, win_height);
     let content_height = {
-        if let Some(mut doc) = Document::from_html(&html, &mut container, None, None) {
-            doc.render(width as f32);
+        if let Ok(mut doc) = Document::from_html(&html, &mut container, None, None) {
+            let _ = doc.render(width as f32);
             (doc.height().ceil() as u32).max(win_height)
         } else {
             win_height
@@ -37,8 +37,8 @@ fn main() {
 
     // Re-create container at full content height and render
     container.resize(width, content_height);
-    if let Some(mut doc) = Document::from_html(&html, &mut container, None, None) {
-        doc.render(width as f32);
+    if let Ok(mut doc) = Document::from_html(&html, &mut container, None, None) {
+        let _ = doc.render(width as f32);
         doc.draw(
             0,
             0.0,
