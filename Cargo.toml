@@ -1,0 +1,3 @@
+[workspace]
+members = ["litehtml-sys", "litehtml"]
+resolver = "2"

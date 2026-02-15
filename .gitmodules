@@ -1,0 +1,3 @@
+[submodule "litehtml-sys/vendor/litehtml"]
+	path = litehtml-sys/vendor/litehtml
+	url = https://github.com/litehtml/litehtml
