@@ -287,9 +287,11 @@ fn skip_until_close_tag(
     let open_pattern = format!("<{}", tag_name);
 
     while let Some(&(i, _)) = chars.peek() {
-        let rest = &html[i..].to_ascii_lowercase();
+        let rest = &html[i..];
 
-        if rest.starts_with(&close_pattern) {
+        if rest.len() >= close_pattern.len()
+            && rest[..close_pattern.len()].eq_ignore_ascii_case(&close_pattern)
+        {
             // Check it's actually a close tag (followed by > or whitespace)
             let after = &rest[close_pattern.len()..];
             if after.starts_with('>') || after.starts_with(char::is_whitespace) {
@@ -302,7 +304,9 @@ fn skip_until_close_tag(
                     return;
                 }
             }
-        } else if rest.starts_with(&open_pattern) {
+        } else if rest.len() >= open_pattern.len()
+            && rest[..open_pattern.len()].eq_ignore_ascii_case(&open_pattern)
+        {
             let after = &rest[open_pattern.len()..];
             if after.starts_with('>')
                 || after.starts_with(char::is_whitespace)

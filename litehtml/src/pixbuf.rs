@@ -447,7 +447,7 @@ impl DocumentContainer for PixbufContainer {
         let mut buffer = cosmic_text::Buffer::new(&mut fs, ct_metrics);
         buffer.set_size(
             &mut fs,
-            Some(pos.width.max(f32::MAX / 2.0)),
+            Some(pos.width.min(f32::MAX / 2.0)),
             Some(line_height),
         );
         buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
