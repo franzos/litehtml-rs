@@ -580,6 +580,7 @@ dependencies = [
  "encoding_rs",
  "image",
  "litehtml-sys",
+ "log",
  "minifb",
  "tiny-skia",
 ]

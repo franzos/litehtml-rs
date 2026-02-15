@@ -10,6 +10,8 @@ use std::marker::PhantomData;
 use std::os::raw::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use log::warn;
+
 pub use litehtml_sys as sys;
 
 // ---------------------------------------------------------------------------
@@ -476,8 +478,15 @@ impl<'a> FontDescription<'a> {
         }
     }
 
-    pub fn family(&self) -> &str {
-        unsafe { c_str_to_str(sys::lh_font_description_family(self.ptr)) }
+    pub fn family(&self) -> &'a str {
+        unsafe {
+            let ptr = sys::lh_font_description_family(self.ptr);
+            if ptr.is_null() {
+                ""
+            } else {
+                CStr::from_ptr(ptr).to_str().unwrap_or("")
+            }
+        }
     }
 
     pub fn size(&self) -> f32 {
@@ -526,12 +535,26 @@ impl<'a> ListMarker<'a> {
         }
     }
 
-    pub fn image(&self) -> &str {
-        unsafe { c_str_to_str(sys::lh_list_marker_image(self.ptr)) }
+    pub fn image(&self) -> &'a str {
+        unsafe {
+            let ptr = sys::lh_list_marker_image(self.ptr);
+            if ptr.is_null() {
+                ""
+            } else {
+                CStr::from_ptr(ptr).to_str().unwrap_or("")
+            }
+        }
     }
 
-    pub fn baseurl(&self) -> &str {
-        unsafe { c_str_to_str(sys::lh_list_marker_baseurl(self.ptr)) }
+    pub fn baseurl(&self) -> &'a str {
+        unsafe {
+            let ptr = sys::lh_list_marker_baseurl(self.ptr);
+            if ptr.is_null() {
+                ""
+            } else {
+                CStr::from_ptr(ptr).to_str().unwrap_or("")
+            }
+        }
     }
 
     pub fn marker_type(&self) -> i32 {
@@ -790,6 +813,19 @@ impl std::fmt::Debug for ConicGradient<'_> {
 /// callbacks to the litehtml rendering engine.
 ///
 /// Methods with default implementations are optional overrides.
+///
+/// # Re-entrancy
+///
+/// litehtml calls these methods during [`Document::from_html`], [`Document::render`],
+/// and [`Document::draw`]. Implementations must not call back into the [`Document`]
+/// from within any trait method — doing so would create aliased mutable references
+/// and is undefined behavior. The borrow checker enforces this for typical usage
+/// since `Document` borrows the container mutably for its lifetime.
+///
+/// Implementations that use interior mutability (e.g., `RefCell`) should be aware
+/// that litehtml calls multiple trait methods during a single `Document` operation
+/// (e.g., `create_font` + `text_width` during `render`), but never re-entrantly
+/// within a single method call.
 #[allow(unused_variables)]
 pub trait DocumentContainer {
     /// Create a font matching the given description. Returns a handle (used as
@@ -919,6 +955,17 @@ pub trait DocumentContainer {
 /// # Safety
 ///
 /// If `ptr` is non-null it must point to a valid, null-terminated C string.
+///
+/// # Lifetime
+///
+/// The returned `&str` carries an unbounded lifetime `'a`. This is acceptable
+/// for internal callback use where the C string is owned by litehtml and the
+/// reference is consumed within the same callback frame. **Do not use this
+/// function in public API methods** — prefer inlining the conversion with a
+/// lifetime tied to `&self` or a struct lifetime parameter instead.
+// SAFETY: all call sites are inside `extern "C"` callbacks where the C string
+// is valid for the duration of the callback invocation. The resulting &str is
+// passed directly to a DocumentContainer trait method and never escapes.
 unsafe fn c_str_to_str<'a>(ptr: *const c_char) -> &'a str {
     if ptr.is_null() {
         ""
@@ -933,6 +980,11 @@ unsafe fn c_str_to_str<'a>(ptr: *const c_char) -> &'a str {
 
 /// Internal data kept alive for the duration of a [`Document`]. Stores the
 /// container reference and any cached values needed by callbacks.
+///
+/// A raw pointer to this struct is passed as `user_data` through the C FFI.
+/// Each callback recovers `&mut BridgeData` via [`bridge_from_user_data`].
+/// This is sound only because litehtml never calls container methods
+/// re-entrantly — at most one callback is active at any time.
 struct BridgeData<'a> {
     container: &'a mut dyn DocumentContainer,
     /// Cached null-terminated default font name, kept alive so the pointer
@@ -945,8 +997,20 @@ struct BridgeData<'a> {
 ///
 /// # Safety
 ///
-/// `user_data` must be a pointer originally obtained from
-/// `Box::into_raw(Box::new(BridgeData { ... }))`.
+/// - `user_data` must be a pointer originally obtained from
+///   `Box::into_raw(Box::new(BridgeData { ... }))`.
+///
+/// - **No re-entrancy**: the caller must guarantee that no other `&mut BridgeData`
+///   derived from the same `user_data` pointer is live at the time of the call.
+///   In practice this means `DocumentContainer` method implementations must never
+///   call back into the `Document` (which would cause litehtml to invoke more
+///   callbacks while the current one holds `&mut BridgeData`). Creating two
+///   simultaneous `&mut` references is immediate undefined behavior.
+///
+///   This invariant is currently upheld by Rust's borrow checker: `Document`
+///   holds `&'a mut dyn DocumentContainer` for its entire lifetime, so the
+///   container cannot simultaneously access the document. litehtml's C++ engine
+///   also dispatches container callbacks sequentially, never re-entrantly.
 unsafe fn bridge_from_user_data<'a>(user_data: *mut c_void) -> &'a mut BridgeData<'a> {
     &mut *(user_data as *mut BridgeData<'a>)
 }
@@ -959,6 +1023,14 @@ unsafe fn bridge_from_user_data<'a>(user_data: *mut c_void) -> &'a mut BridgeDat
 //   4. Convert the result back to C types
 //   5. The entire body is wrapped in catch_unwind to prevent panics from
 //      unwinding across the FFI boundary (which is UB).
+//
+// Re-entrancy constraint: each callback creates a temporary `&mut BridgeData`
+// (and thus `&mut dyn DocumentContainer`) from the raw pointer. This is sound
+// only because litehtml dispatches callbacks sequentially — it never calls a
+// second container method while a previous one is still executing. If that
+// invariant were violated, two `&mut` references to the same data would exist
+// simultaneously, which is UB. The `DocumentContainer` trait methods must not
+// call back into the `Document` for the same reason.
 
 unsafe extern "C" fn cb_create_font(
     user_data: *mut c_void,
@@ -1236,7 +1308,11 @@ unsafe extern "C" fn cb_transform_text(
         let text = c_str_to_str(text);
         let transform = TextTransform::from_c_int(tt);
         let result = bridge.container.transform_text(text, transform);
-        if let (Some(set_fn), Ok(c_result)) = (set_result, CString::new(result)) {
+        if let Some(set_fn) = set_result {
+            let c_result = CString::new(result).unwrap_or_else(|_| {
+                warn!("transform_text result contained interior null byte, using empty string");
+                CString::default()
+            });
             set_fn(ctx, c_result.as_ptr());
         }
     }));
@@ -1254,7 +1330,11 @@ unsafe extern "C" fn cb_import_css(
         let url = c_str_to_str(url);
         let baseurl = c_str_to_str(baseurl);
         let result = bridge.container.import_css(url, baseurl);
-        if let (Some(set_fn), Ok(c_result)) = (set_result, CString::new(result)) {
+        if let Some(set_fn) = set_result {
+            let c_result = CString::new(result).unwrap_or_else(|_| {
+                warn!("import_css result contained interior null byte, using empty string");
+                CString::default()
+            });
             set_fn(ctx, c_result.as_ptr());
         }
     }));

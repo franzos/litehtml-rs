@@ -522,30 +522,35 @@ extern "C" {
 
 const char* lh_font_description_family(const lh_font_description_t* fd)
 {
+    if (!fd) return "";
     const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
     return d->family.c_str();
 }
 
 float lh_font_description_size(const lh_font_description_t* fd)
 {
+    if (!fd) return 0.0f;
     const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
     return d->size;
 }
 
 int lh_font_description_style(const lh_font_description_t* fd)
 {
+    if (!fd) return 0;
     const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
     return static_cast<int>(d->style);
 }
 
 int lh_font_description_weight(const lh_font_description_t* fd)
 {
+    if (!fd) return 0;
     const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
     return d->weight;
 }
 
 int lh_font_description_decoration_line(const lh_font_description_t* fd)
 {
+    if (!fd) return 0;
     const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
     return d->decoration_line;
 }
@@ -556,42 +561,49 @@ int lh_font_description_decoration_line(const lh_font_description_t* fd)
 
 const char* lh_list_marker_image(const lh_list_marker_t* m)
 {
+    if (!m) return "";
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return mk->image.c_str();
 }
 
 const char* lh_list_marker_baseurl(const lh_list_marker_t* m)
 {
+    if (!m) return "";
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return mk->baseurl;
 }
 
 int lh_list_marker_type(const lh_list_marker_t* m)
 {
+    if (!m) return 0;
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return static_cast<int>(mk->marker_type);
 }
 
 lh_web_color_t lh_list_marker_color(const lh_list_marker_t* m)
 {
+    if (!m) return {};
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return to_c(mk->color);
 }
 
 lh_position_t lh_list_marker_pos(const lh_list_marker_t* m)
 {
+    if (!m) return {};
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return to_c(mk->pos);
 }
 
 int lh_list_marker_index(const lh_list_marker_t* m)
 {
+    if (!m) return 0;
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return mk->index;
 }
 
 uintptr_t lh_list_marker_font(const lh_list_marker_t* m)
 {
+    if (!m) return 0;
     const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
     return mk->font;
 }
@@ -602,42 +614,49 @@ uintptr_t lh_list_marker_font(const lh_list_marker_t* m)
 
 lh_position_t lh_background_layer_border_box(const lh_background_layer_t* layer)
 {
+    if (!layer) return {};
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return to_c(bl->border_box);
 }
 
 lh_border_radiuses_t lh_background_layer_border_radius(const lh_background_layer_t* layer)
 {
+    if (!layer) return {};
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return to_c(bl->border_radius);
 }
 
 lh_position_t lh_background_layer_clip_box(const lh_background_layer_t* layer)
 {
+    if (!layer) return {};
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return to_c(bl->clip_box);
 }
 
 lh_position_t lh_background_layer_origin_box(const lh_background_layer_t* layer)
 {
+    if (!layer) return {};
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return to_c(bl->origin_box);
 }
 
 int lh_background_layer_attachment(const lh_background_layer_t* layer)
 {
+    if (!layer) return 0;
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return static_cast<int>(bl->attachment);
 }
 
 int lh_background_layer_repeat(const lh_background_layer_t* layer)
 {
+    if (!layer) return 0;
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return static_cast<int>(bl->repeat);
 }
 
 int lh_background_layer_is_root(const lh_background_layer_t* layer)
 {
+    if (!layer) return 0;
     const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
     return bl->is_root ? 1 : 0;
 }
@@ -648,6 +667,7 @@ int lh_background_layer_is_root(const lh_background_layer_t* layer)
 
 lh_point_t lh_linear_gradient_start(const lh_linear_gradient_t* g)
 {
+    if (!g) return {};
     const auto* lg = reinterpret_cast<
         const litehtml::background_layer::linear_gradient*>(g);
     return to_c(lg->start);
@@ -655,6 +675,7 @@ lh_point_t lh_linear_gradient_start(const lh_linear_gradient_t* g)
 
 lh_point_t lh_linear_gradient_end(const lh_linear_gradient_t* g)
 {
+    if (!g) return {};
     const auto* lg = reinterpret_cast<
         const litehtml::background_layer::linear_gradient*>(g);
     return to_c(lg->end);
@@ -662,6 +683,7 @@ lh_point_t lh_linear_gradient_end(const lh_linear_gradient_t* g)
 
 int lh_linear_gradient_color_points_count(const lh_linear_gradient_t* g)
 {
+    if (!g) return 0;
     const auto* lg = reinterpret_cast<
         const litehtml::background_layer::linear_gradient*>(g);
     return static_cast<int>(lg->color_points.size());
@@ -670,6 +692,7 @@ int lh_linear_gradient_color_points_count(const lh_linear_gradient_t* g)
 float lh_linear_gradient_color_point_offset(const lh_linear_gradient_t* g,
                                              int idx)
 {
+    if (!g) return 0.0f;
     const auto* lg = reinterpret_cast<
         const litehtml::background_layer::linear_gradient*>(g);
     if (idx < 0 || idx >= static_cast<int>(lg->color_points.size()))
@@ -680,6 +703,7 @@ float lh_linear_gradient_color_point_offset(const lh_linear_gradient_t* g,
 lh_web_color_t lh_linear_gradient_color_point_color(
     const lh_linear_gradient_t* g, int idx)
 {
+    if (!g) return {};
     const auto* lg = reinterpret_cast<
         const litehtml::background_layer::linear_gradient*>(g);
     if (idx < 0 || idx >= static_cast<int>(lg->color_points.size()))
@@ -696,6 +720,7 @@ lh_web_color_t lh_linear_gradient_color_point_color(
 
 lh_point_t lh_radial_gradient_position(const lh_radial_gradient_t* g)
 {
+    if (!g) return {};
     const auto* rg = reinterpret_cast<
         const litehtml::background_layer::radial_gradient*>(g);
     return to_c(rg->position);
@@ -703,6 +728,7 @@ lh_point_t lh_radial_gradient_position(const lh_radial_gradient_t* g)
 
 lh_point_t lh_radial_gradient_radius(const lh_radial_gradient_t* g)
 {
+    if (!g) return {};
     const auto* rg = reinterpret_cast<
         const litehtml::background_layer::radial_gradient*>(g);
     return to_c(rg->radius);
@@ -710,6 +736,7 @@ lh_point_t lh_radial_gradient_radius(const lh_radial_gradient_t* g)
 
 int lh_radial_gradient_color_points_count(const lh_radial_gradient_t* g)
 {
+    if (!g) return 0;
     const auto* rg = reinterpret_cast<
         const litehtml::background_layer::radial_gradient*>(g);
     return static_cast<int>(rg->color_points.size());
@@ -718,6 +745,7 @@ int lh_radial_gradient_color_points_count(const lh_radial_gradient_t* g)
 float lh_radial_gradient_color_point_offset(const lh_radial_gradient_t* g,
                                              int idx)
 {
+    if (!g) return 0.0f;
     const auto* rg = reinterpret_cast<
         const litehtml::background_layer::radial_gradient*>(g);
     if (idx < 0 || idx >= static_cast<int>(rg->color_points.size()))
@@ -728,6 +756,7 @@ float lh_radial_gradient_color_point_offset(const lh_radial_gradient_t* g,
 lh_web_color_t lh_radial_gradient_color_point_color(
     const lh_radial_gradient_t* g, int idx)
 {
+    if (!g) return {};
     const auto* rg = reinterpret_cast<
         const litehtml::background_layer::radial_gradient*>(g);
     if (idx < 0 || idx >= static_cast<int>(rg->color_points.size()))
@@ -744,6 +773,7 @@ lh_web_color_t lh_radial_gradient_color_point_color(
 
 lh_point_t lh_conic_gradient_position(const lh_conic_gradient_t* g)
 {
+    if (!g) return {};
     const auto* cg = reinterpret_cast<
         const litehtml::background_layer::conic_gradient*>(g);
     return to_c(cg->position);
@@ -751,6 +781,7 @@ lh_point_t lh_conic_gradient_position(const lh_conic_gradient_t* g)
 
 float lh_conic_gradient_angle(const lh_conic_gradient_t* g)
 {
+    if (!g) return 0.0f;
     const auto* cg = reinterpret_cast<
         const litehtml::background_layer::conic_gradient*>(g);
     return cg->angle;
@@ -758,6 +789,7 @@ float lh_conic_gradient_angle(const lh_conic_gradient_t* g)
 
 int lh_conic_gradient_color_points_count(const lh_conic_gradient_t* g)
 {
+    if (!g) return 0;
     const auto* cg = reinterpret_cast<
         const litehtml::background_layer::conic_gradient*>(g);
     return static_cast<int>(cg->color_points.size());
@@ -766,6 +798,7 @@ int lh_conic_gradient_color_points_count(const lh_conic_gradient_t* g)
 float lh_conic_gradient_color_point_offset(const lh_conic_gradient_t* g,
                                             int idx)
 {
+    if (!g) return 0.0f;
     const auto* cg = reinterpret_cast<
         const litehtml::background_layer::conic_gradient*>(g);
     if (idx < 0 || idx >= static_cast<int>(cg->color_points.size()))
@@ -776,6 +809,7 @@ float lh_conic_gradient_color_point_offset(const lh_conic_gradient_t* g,
 lh_web_color_t lh_conic_gradient_color_point_color(
     const lh_conic_gradient_t* g, int idx)
 {
+    if (!g) return {};
     const auto* cg = reinterpret_cast<
         const litehtml::background_layer::conic_gradient*>(g);
     if (idx < 0 || idx >= static_cast<int>(cg->color_points.size()))
