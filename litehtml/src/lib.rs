@@ -1788,9 +1788,30 @@ impl<'a> Element<'a> {
     }
 
     /// All per-line inline boxes in absolute document coordinates.
+    ///
+    /// Uses a single C call with a callback to avoid recomputing boxes N+1 times
+    /// (which the count+index pattern would do).
     pub fn inline_boxes(&self) -> Vec<Position> {
-        let count = self.inline_boxes_count();
-        (0..count).filter_map(|i| self.inline_box_at(i)).collect()
+        unsafe extern "C" fn collect_box(
+            pos: *const sys::lh_position_t,
+            ctx: *mut std::ffi::c_void,
+        ) {
+            if pos.is_null() || ctx.is_null() {
+                return;
+            }
+            let out = &mut *(ctx as *mut Vec<Position>);
+            out.push(Position::from(*pos));
+        }
+
+        let mut result: Vec<Position> = Vec::new();
+        unsafe {
+            sys::lh_element_get_inline_boxes(
+                self.ptr,
+                Some(collect_box),
+                &mut result as *mut Vec<Position> as *mut std::ffi::c_void,
+            );
+        }
+        result
     }
 
     /// Computed text-align: 0=left, 1=right, 2=center, 3=justify.

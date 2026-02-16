@@ -53,25 +53,48 @@ impl SelectionEndpoint {
     }
 }
 
+/// Cached result of a document-order comparison between two elements.
+#[derive(Clone)]
+struct OrderCache {
+    a: *mut crate::sys::lh_element_t,
+    b: *mut crate::sys::lh_element_t,
+    a_before_b: bool,
+}
+
 /// Text selection state for a litehtml document.
 ///
-/// Holds the start and end endpoints of a selection, plus cached highlight
-/// rectangles. Endpoints contain raw element pointers valid while the parent
-/// `Document` is alive — the caller must ensure the document outlives this struct.
-pub struct Selection {
+/// The `'doc` lifetime ties this selection to its parent [`Document`], preventing
+/// use-after-free if the document is dropped while the selection holds element
+/// pointers. Use [`Selection::for_document`] to create a lifetime-bound selection.
+pub struct Selection<'doc> {
     start: Option<SelectionEndpoint>,
     end: Option<SelectionEndpoint>,
     rectangles: Vec<Position>,
+    order_cache: Option<OrderCache>,
+    _doc: PhantomData<&'doc ()>,
 }
 
-impl Selection {
-    /// Create an empty (inactive) selection.
+impl<'doc> Selection<'doc> {
+    /// Create an empty (inactive) selection without lifetime enforcement.
+    ///
+    /// Prefer [`Selection::for_document`] to tie the selection lifetime to
+    /// a specific document, preventing use-after-free at compile time.
     pub fn new() -> Self {
         Self {
             start: None,
             end: None,
             rectangles: Vec::new(),
+            order_cache: None,
+            _doc: PhantomData,
         }
+    }
+
+    /// Create an empty selection tied to a document's lifetime.
+    ///
+    /// The returned `Selection` cannot outlive `doc`, enforced by the compiler.
+    /// The document is NOT borrowed persistently — only the lifetime is captured.
+    pub fn for_document(_doc: &'doc Document<'_>) -> Self {
+        Self::new()
     }
 
     /// Begin a selection at document coordinates `(x, y)`.
@@ -119,6 +142,7 @@ impl Selection {
         self.start = None;
         self.end = None;
         self.rectangles.clear();
+        self.order_cache = None;
     }
 
     /// Returns `true` if there is an active selection with both start and end.
@@ -133,8 +157,8 @@ impl Selection {
         let start = self.start.as_ref()?;
         let end = self.end.as_ref()?;
 
-        // Normalize into document order
-        let (first, second) = normalize_endpoints(start, end);
+        // Normalize into document order (use cache if available)
+        let (first, second) = normalize_endpoints(start, end, &self.order_cache);
         let first_el = first.element();
         let second_el = second.element();
 
@@ -183,8 +207,24 @@ impl Selection {
             _ => return,
         };
 
+        // Update order cache if endpoints changed
+        if start.element != end.element {
+            let needs_update = self
+                .order_cache
+                .as_ref()
+                .map_or(true, |c| c.a != start.element || c.b != end.element);
+            if needs_update {
+                let a_before_b = is_before(&start.element(), &end.element());
+                self.order_cache = Some(OrderCache {
+                    a: start.element,
+                    b: end.element,
+                    a_before_b,
+                });
+            }
+        }
+
         // Normalize into document order
-        let (first, second) = normalize_endpoints(start, end);
+        let (first, second) = normalize_endpoints(start, end, &self.order_cache);
 
         if first.element == second.element {
             let el = first.element();
@@ -234,7 +274,7 @@ impl Selection {
     }
 }
 
-impl Default for Selection {
+impl Default for Selection<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -261,9 +301,12 @@ fn is_before(a: &Element<'_>, b: &Element<'_>) -> bool {
 }
 
 /// Normalize user-order endpoints into document order: returns (first, second).
+///
+/// Uses the cached order result when available to avoid repeated DOM walks.
 fn normalize_endpoints<'a>(
     a: &'a SelectionEndpoint,
     b: &'a SelectionEndpoint,
+    cache: &Option<OrderCache>,
 ) -> (&'a SelectionEndpoint, &'a SelectionEndpoint) {
     if a.element == b.element {
         if a.char_index <= b.char_index {
@@ -271,10 +314,16 @@ fn normalize_endpoints<'a>(
         } else {
             (b, a)
         }
-    } else if is_before(&a.element(), &b.element()) {
-        (a, b)
     } else {
-        (b, a)
+        let a_before_b = cache
+            .as_ref()
+            .filter(|c| c.a == a.element && c.b == b.element)
+            .map_or_else(|| is_before(&a.element(), &b.element()), |c| c.a_before_b);
+        if a_before_b {
+            (a, b)
+        } else {
+            (b, a)
+        }
     }
 }
 
@@ -346,6 +395,8 @@ fn hit_test_char(
 
 /// Find which character index corresponds to pixel offset `target_x` within
 /// the given text rendered with `font`.
+///
+/// Builds the prefix string incrementally to avoid O(n) allocations per call.
 fn find_char_at_x(
     measure_text: &MeasureTextFn<'_>,
     text: &str,
@@ -356,21 +407,23 @@ fn find_char_at_x(
         return 0;
     }
 
-    let chars: Vec<char> = text.chars().collect();
+    let mut prefix = String::with_capacity(text.len());
     let mut prev_width = 0.0f32;
+    let mut count = 0;
 
-    for i in 0..chars.len() {
-        let prefix: String = chars[..=i].iter().collect();
+    for ch in text.chars() {
+        prefix.push(ch);
+        count += 1;
         let width = measure_text(&prefix, font);
         let midpoint = (prev_width + width) / 2.0;
 
         if target_x < midpoint {
-            return i;
+            return count - 1;
         }
         prev_width = width;
     }
 
-    chars.len()
+    count
 }
 
 // ---------------------------------------------------------------------------
@@ -482,12 +535,18 @@ fn closest_text_leaf<'a>(el: &Element<'a>, target_x: f32, target_y: f32) -> Opti
         .map(|(el, _)| el)
 }
 
+/// Maximum ancestor levels to traverse before giving up.
+/// Prevents infinite loops on malformed DOMs.
+const MAX_TREE_DEPTH: usize = 256;
+
 /// Walk to the next text leaf after `el`, stopping before `stop`.
 /// Walks up to the parent, then to the next sibling, then descends.
+/// Gives up after [`MAX_TREE_DEPTH`] ancestor levels to guard against
+/// malformed or extremely deep DOMs.
 fn next_text_leaf<'a>(el: &Element<'a>, stop: &Element<'a>) -> Option<Element<'a>> {
     let mut current_ptr = el.as_ptr();
 
-    loop {
+    for _ in 0..MAX_TREE_DEPTH {
         let current = Element {
             ptr: current_ptr,
             _phantom: PhantomData,
@@ -525,6 +584,8 @@ fn next_text_leaf<'a>(el: &Element<'a>, stop: &Element<'a>) -> Option<Element<'a
         // No more siblings at this level, walk up
         current_ptr = parent.as_ptr();
     }
+
+    None
 }
 
 // ---------------------------------------------------------------------------

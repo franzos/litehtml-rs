@@ -1260,6 +1260,30 @@ void lh_element_get_inline_box_at(lh_element_t* el, int index, lh_position_t* po
     *pos = to_c(box);
 }
 
+void lh_element_get_inline_boxes(lh_element_t* el, lh_inline_box_callback cb, void* ctx)
+{
+    if (!el || !cb) return;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    auto ri = elem->get_render_item();
+    if (!ri) return;
+
+    litehtml::position::vector boxes;
+    ri->get_inline_boxes(boxes);
+    if (boxes.empty()) return;
+
+    float ox, oy;
+    compute_ri_offset(ri, ox, oy);
+
+    for (const auto& box_ : boxes)
+    {
+        litehtml::position abs = box_;
+        abs.x += ox;
+        abs.y += oy;
+        lh_position_t pos = to_c(abs);
+        cb(&pos, ctx);
+    }
+}
+
 int lh_element_get_text_align(lh_element_t* el)
 {
     if (!el) return 0;

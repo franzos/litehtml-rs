@@ -80,7 +80,7 @@ fn main() {
         }
     };
 
-    let mut selection = Selection::new();
+    let mut selection = Selection::for_document(&doc);
     let mut selection_rects: Vec<Position> = Vec::new();
     let mut mouse_was_down = false;
     let mut drag_origin: Option<(f32, f32)> = None;

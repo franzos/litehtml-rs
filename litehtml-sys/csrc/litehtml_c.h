@@ -376,6 +376,11 @@ int lh_element_get_inline_boxes_count(lh_element_t* el);
 /* Get the i-th inline box in absolute document coordinates. */
 void lh_element_get_inline_box_at(lh_element_t* el, int index, lh_position_t* pos);
 
+/* Get all inline boxes in one call via callback. Avoids recomputing boxes N+1 times.
+   The callback receives each box in absolute document coordinates plus a user context. */
+typedef void (*lh_inline_box_callback)(const lh_position_t* pos, void* ctx);
+void lh_element_get_inline_boxes(lh_element_t* el, lh_inline_box_callback cb, void* ctx);
+
 /* Get the computed text-align value (0=left, 1=right, 2=center, 3=justify). */
 int lh_element_get_text_align(lh_element_t* el);
 
