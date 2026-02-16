@@ -1,6 +1,6 @@
 [package]
 name = "litehtml-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT AND BSD-3-Clause AND Apache-2.0"
 authors = ["Franz Geffke <mail@gofranz.com>"]
