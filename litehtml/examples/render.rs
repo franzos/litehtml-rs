@@ -1,6 +1,6 @@
 /// Render an HTML file in a window with text selection support.
 ///
-/// Usage: cargo run --example render --features pixbuf -- input.html [width]
+/// Usage: cargo run --example render --features pixbuf -- input.html [width] [--scale N]
 ///
 /// Click and drag to select text. Selected text is printed on exit.
 use minifb::{Key, MouseButton, MouseMode, Window, WindowOptions};
@@ -23,7 +23,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("Usage: {} <input.html> [width]", args[0]);
+        eprintln!("Usage: {} <input.html> [width] [--scale N]", args[0]);
         process::exit(1);
     }
 
@@ -31,13 +31,25 @@ fn main() {
     let width: u32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(800);
     let win_height: u32 = 600;
 
+    // Parse --scale flag
+    let scale: f32 = args
+        .iter()
+        .position(|a| a == "--scale")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1.0);
+
     let html = fs::read_to_string(input).unwrap_or_else(|e| {
         eprintln!("Cannot read {}: {}", input, e);
         process::exit(1);
     });
 
-    // First pass: measure content height
-    let mut container = PixbufContainer::new(width, win_height);
+    // Physical pixel dimensions for the window buffer
+    let phys_width = ((width as f32) * scale).ceil() as u32;
+    let phys_win_height = ((win_height as f32) * scale).ceil() as u32;
+
+    // First pass: measure content height (logical)
+    let mut container = PixbufContainer::new_with_scale(width, win_height, scale);
     let content_height = {
         if let Ok(mut doc) = Document::from_html(&html, &mut container, None, None) {
             let _ = doc.render(width as f32);
@@ -47,8 +59,8 @@ fn main() {
         }
     };
 
-    // Second pass: render at full content height
-    container.resize(width, content_height);
+    // Second pass: render at full content height (logical)
+    container.resize_with_scale(width, content_height, scale);
     if let Ok(mut doc) = Document::from_html(&html, &mut container, None, None) {
         let _ = doc.render(width as f32);
         doc.draw(
@@ -65,6 +77,7 @@ fn main() {
     }
 
     // Save base framebuffer (premultiplied RGBA composited against white)
+    // The pixmap is at physical resolution
     let base_framebuffer = premul_to_rgb(container.pixels());
 
     // Third pass: create document for interactive selection (layout only, no draw)
@@ -87,10 +100,11 @@ fn main() {
     let mut drag_active = false;
     let mut last_mouse: Option<(f32, f32)> = None;
 
+    // Window size is physical pixels (minifb displays 1:1)
     let mut window = Window::new(
         input,
-        width as usize,
-        win_height as usize,
+        phys_width as usize,
+        phys_win_height as usize,
         WindowOptions {
             resize: false,
             ..WindowOptions::default()
@@ -105,7 +119,7 @@ fn main() {
     let mut scroll_y: u32 = 0;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        // Scroll handling
+        // Scroll handling (in logical units)
         if let Some((_, dy)) = window.get_scroll_wheel() {
             let delta = (dy * 40.0) as i32;
             scroll_y = (scroll_y as i32 - delta).clamp(0, max_scroll as i32) as u32;
@@ -130,21 +144,22 @@ fn main() {
             scroll_y = max_scroll;
         }
 
-        // Mouse selection
+        // Mouse selection — minifb reports window-pixel coords which are physical.
+        // Convert to logical for litehtml.
         let mouse_down = window.get_mouse_down(MouseButton::Left);
-        if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Clamp) {
+        if let Some((mx_phys, my_phys)) = window.get_mouse_pos(MouseMode::Clamp) {
+            let mx = mx_phys / scale;
+            let my = my_phys / scale;
             let doc_x = mx;
             let doc_y = my + scroll_y as f32;
 
             if mouse_down && !mouse_was_down {
-                // Mouse just pressed — record origin, don't start selection yet
                 drag_origin = Some((mx, my));
                 drag_active = false;
                 selection.clear();
                 selection_rects.clear();
                 last_mouse = Some((mx, my));
             } else if mouse_down {
-                // Skip if mouse hasn't moved
                 let moved = last_mouse.map_or(true, |(lx, ly)| {
                     (mx - lx).abs() > 0.5 || (my - ly).abs() > 0.5
                 });
@@ -153,12 +168,10 @@ fn main() {
                     last_mouse = Some((mx, my));
 
                     if !drag_active {
-                        // Check drag threshold
                         if let Some((ox, oy)) = drag_origin {
                             let dist = ((mx - ox).powi(2) + (my - oy).powi(2)).sqrt();
                             if dist >= DRAG_THRESHOLD {
                                 drag_active = true;
-                                // Start selection at the original click point
                                 let origin_doc_y = oy + scroll_y as f32;
                                 selection.start_at(&doc, &measure, ox, origin_doc_y, ox, oy);
                             }
@@ -169,7 +182,6 @@ fn main() {
                         selection.extend_to(&doc, &measure, doc_x, doc_y, mx, my);
                         selection_rects = selection.rectangles().to_vec();
 
-                        // Auto-scroll when dragging near edges
                         if my < SCROLL_EDGE {
                             let factor = 1.0 - (my / SCROLL_EDGE).max(0.0);
                             let speed = (factor * SCROLL_SPEED_MAX).ceil() as u32;
@@ -183,7 +195,6 @@ fn main() {
                     }
                 }
             } else {
-                // Mouse released
                 if drag_active {
                     drag_active = false;
                 }
@@ -192,23 +203,37 @@ fn main() {
         }
         mouse_was_down = mouse_down;
 
-        // Build visible slice from base framebuffer
-        let row_start = scroll_y as usize * width as usize;
-        let row_end =
-            (row_start + win_height as usize * width as usize).min(base_framebuffer.len());
+        // Build visible slice from base framebuffer (physical coords)
+        let phys_scroll_y = ((scroll_y as f32) * scale).ceil() as u32;
+        let row_start = phys_scroll_y as usize * phys_width as usize;
+        let row_end = (row_start + phys_win_height as usize * phys_width as usize)
+            .min(base_framebuffer.len());
         let mut visible: Vec<u32> = base_framebuffer[row_start..row_end].to_vec();
 
-        // Overlay selection highlight
+        // Overlay selection highlight (scale rects to physical)
         for rect in &selection_rects {
-            overlay_selection_rect(&mut visible, width, scroll_y, win_height, rect);
+            let phys_rect = Position {
+                x: rect.x * scale,
+                y: rect.y * scale,
+                width: rect.width * scale,
+                height: rect.height * scale,
+            };
+            overlay_selection_rect(
+                &mut visible,
+                phys_width,
+                phys_scroll_y,
+                phys_win_height,
+                &phys_rect,
+            );
         }
 
-        if visible.len() < (win_height as usize * width as usize) {
-            visible.resize(win_height as usize * width as usize, 0x00FFFFFF);
+        let expected = phys_win_height as usize * phys_width as usize;
+        if visible.len() < expected {
+            visible.resize(expected, 0x00FFFFFF);
         }
 
         window
-            .update_with_buffer(&visible, width as usize, win_height as usize)
+            .update_with_buffer(&visible, phys_width as usize, phys_win_height as usize)
             .unwrap();
     }
 

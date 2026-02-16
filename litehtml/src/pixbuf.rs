@@ -47,6 +47,7 @@ pub struct PixbufContainer {
     viewport: Position,
     base_url: String,
     caption: String,
+    scale_factor: f32,
 }
 
 impl PixbufContainer {
@@ -54,8 +55,20 @@ impl PixbufContainer {
     ///
     /// Initializes a transparent pixmap and loads system fonts via cosmic-text.
     pub fn new(width: u32, height: u32) -> Self {
+        Self::new_with_scale(width, height, 1.0)
+    }
+
+    /// Create a new pixel buffer container with the given logical dimensions
+    /// and a display scale factor for HiDPI rendering.
+    ///
+    /// The internal pixmap is allocated at physical dimensions
+    /// (`width * scale_factor`, `height * scale_factor`), while the viewport
+    /// stores the logical size. At scale 1.0 this behaves identically to `new()`.
+    pub fn new_with_scale(width: u32, height: u32, scale_factor: f32) -> Self {
+        let phys_w = ((width as f32) * scale_factor).ceil() as u32;
+        let phys_h = ((height as f32) * scale_factor).ceil() as u32;
         let pixmap =
-            tiny_skia::Pixmap::new(width.max(1), height.max(1)).expect("failed to create pixmap");
+            tiny_skia::Pixmap::new(phys_w.max(1), phys_h.max(1)).expect("failed to create pixmap");
         Self {
             pixmap,
             font_system: Rc::new(RefCell::new(cosmic_text::FontSystem::new())),
@@ -72,6 +85,7 @@ impl PixbufContainer {
             },
             base_url: String::new(),
             caption: String::new(),
+            scale_factor,
         }
     }
 
@@ -128,19 +142,37 @@ impl PixbufContainer {
             anti_alias: false,
             ..Paint::default()
         };
+        let transform = self.scale_transform();
         let mask = self.build_clip_mask();
         for rect in rects {
             if let Some(r) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
-                self.pixmap
-                    .fill_rect(r, &paint, Transform::identity(), mask.as_ref());
+                self.pixmap.fill_rect(r, &paint, transform, mask.as_ref());
             }
         }
     }
 
+    /// Get the current display scale factor.
+    pub fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+
+    /// Return a `Transform` that scales from logical to physical coordinates.
+    fn scale_transform(&self) -> Transform {
+        Transform::from_scale(self.scale_factor, self.scale_factor)
+    }
+
     /// Resize the pixmap, clearing all existing content.
     pub fn resize(&mut self, width: u32, height: u32) {
+        self.resize_with_scale(width, height, self.scale_factor);
+    }
+
+    /// Resize the pixmap with a new scale factor, clearing all existing content.
+    pub fn resize_with_scale(&mut self, width: u32, height: u32, scale_factor: f32) {
+        self.scale_factor = scale_factor;
+        let phys_w = ((width as f32) * scale_factor).ceil() as u32;
+        let phys_h = ((height as f32) * scale_factor).ceil() as u32;
         self.pixmap =
-            tiny_skia::Pixmap::new(width.max(1), height.max(1)).expect("failed to create pixmap");
+            tiny_skia::Pixmap::new(phys_w.max(1), phys_h.max(1)).expect("failed to create pixmap");
         self.viewport.width = width as f32;
         self.viewport.height = height as f32;
     }
@@ -163,10 +195,27 @@ impl PixbufContainer {
             Transform::identity(),
         );
 
-        // Intersect each clip rect
+        // Intersect each clip rect (scale logical positions to physical)
+        let s = self.scale_factor;
         for (pos, radii) in &self.clip_stack {
             let mut clip_mask = tiny_skia::Mask::new(w, h)?;
-            let path = build_rounded_rect_path(pos.x, pos.y, pos.width, pos.height, radii);
+            let scaled_radii = BorderRadiuses {
+                top_left_x: radii.top_left_x * s,
+                top_left_y: radii.top_left_y * s,
+                top_right_x: radii.top_right_x * s,
+                top_right_y: radii.top_right_y * s,
+                bottom_right_x: radii.bottom_right_x * s,
+                bottom_right_y: radii.bottom_right_y * s,
+                bottom_left_x: radii.bottom_left_x * s,
+                bottom_left_y: radii.bottom_left_y * s,
+            };
+            let path = build_rounded_rect_path(
+                pos.x * s,
+                pos.y * s,
+                pos.width * s,
+                pos.height * s,
+                &scaled_radii,
+            );
             if let Some(path) = path {
                 clip_mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
             }
@@ -191,7 +240,7 @@ impl PixbufContainer {
     /// Measure a string of text using cosmic-text, returning total width.
     fn measure_text(&self, text: &str, font: &FontData) -> f32 {
         let mut fs = self.font_system.borrow_mut();
-        let line_height = font.metrics.height;
+        let line_height = font.metrics.height * self.scale_factor;
         let metrics = Metrics::new(font.size, line_height);
         let mut buffer = cosmic_text::Buffer::new(&mut fs, metrics);
         buffer.set_size(&mut fs, Some(f32::MAX), Some(line_height));
@@ -210,20 +259,21 @@ impl PixbufContainer {
     pub fn text_measure_fn(&self) -> impl Fn(&str, usize) -> f32 {
         let fonts = Rc::clone(&self.fonts);
         let font_system = Rc::clone(&self.font_system);
+        let scale_factor = self.scale_factor;
         move |text: &str, font: usize| -> f32 {
             let fonts_ref = fonts.borrow();
             let Some(font_data) = fonts_ref.get(&font) else {
                 return text.len() as f32 * 8.0;
             };
             let mut fs = font_system.borrow_mut();
-            let line_height = font_data.metrics.height;
+            let line_height = font_data.metrics.height * scale_factor;
             let metrics = Metrics::new(font_data.size, line_height);
             let mut buffer = cosmic_text::Buffer::new(&mut fs, metrics);
             buffer.set_size(&mut fs, Some(f32::MAX), Some(line_height));
             let attrs = attrs_from_font(font_data);
             buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut fs, false);
-            buffer.layout_runs().map(|run| run.line_w).sum::<f32>()
+            buffer.layout_runs().map(|run| run.line_w).sum::<f32>() / scale_factor
         }
     }
 }
@@ -374,6 +424,8 @@ impl DocumentContainer for PixbufContainer {
     fn create_font(&mut self, descr: &FontDescription) -> (usize, FontMetrics) {
         let family_str = descr.family().to_string();
         let size = descr.size();
+        let s = self.scale_factor;
+        let physical_size = size * s;
 
         let weight = Weight(descr.weight() as u16);
         let style = match descr.style() {
@@ -385,9 +437,10 @@ impl DocumentContainer for PixbufContainer {
         let id = self.next_font_id;
         self.next_font_id += 1;
 
-        // Use cosmic-text to measure reference characters for metrics
-        let line_height = (size * 1.2).ceil();
-        let ct_metrics = Metrics::new(size, line_height);
+        // Use cosmic-text to measure reference characters for metrics.
+        // Font is created at physical size; metrics are divided back to logical.
+        let line_height = (physical_size * 1.2).ceil();
+        let ct_metrics = Metrics::new(physical_size, line_height);
 
         let font_family = match family_str.as_str() {
             "serif" => Family::Serif,
@@ -438,16 +491,17 @@ impl DocumentContainer for PixbufContainer {
                 .unwrap_or(size * 0.6)
         };
 
-        let ascent = size * 0.8;
-        let descent = size * 0.2;
+        let ascent = physical_size * 0.8;
+        let descent = physical_size * 0.2;
 
+        // Return logical metrics to litehtml (divided by scale_factor)
         let metrics = FontMetrics {
             font_size: size,
-            height: line_height,
-            ascent,
-            descent,
-            x_height,
-            ch_width,
+            height: (size * 1.2).ceil(),
+            ascent: ascent / s,
+            descent: descent / s,
+            x_height: x_height / s,
+            ch_width: ch_width / s,
             draw_spaces: true,
             sub_shift: size * 0.3,
             super_shift: size * 0.4,
@@ -457,7 +511,7 @@ impl DocumentContainer for PixbufContainer {
             id,
             FontData {
                 family: family_str,
-                size,
+                size: physical_size,
                 weight,
                 style,
                 metrics,
@@ -476,7 +530,7 @@ impl DocumentContainer for PixbufContainer {
         let Some(font_data) = fonts.get(&font) else {
             return text.len() as f32 * 8.0;
         };
-        self.measure_text(text, font_data)
+        self.measure_text(text, font_data) / self.scale_factor
     }
 
     fn draw_text(&mut self, _hdc: usize, text: &str, font: usize, color: Color, pos: Position) {
@@ -485,7 +539,7 @@ impl DocumentContainer for PixbufContainer {
             return;
         };
 
-        let line_height = font_data.metrics.height;
+        let line_height = font_data.metrics.height * self.scale_factor;
         let ct_metrics = Metrics::new(font_data.size, line_height);
         let attrs = attrs_from_font(font_data);
         let mask = self.build_clip_mask();
@@ -502,8 +556,9 @@ impl DocumentContainer for PixbufContainer {
 
         let mut swash = self.swash_cache.borrow_mut();
 
-        let draw_x = pos.x as i32;
-        let draw_y = pos.y as i32;
+        // Scale logical positions from litehtml to physical pixel coords
+        let draw_x = (pos.x * self.scale_factor) as i32;
+        let draw_y = (pos.y * self.scale_factor) as i32;
         let pix_w = self.pixmap.width() as i32;
         let pix_h = self.pixmap.height() as i32;
 
@@ -620,6 +675,7 @@ impl DocumentContainer for PixbufContainer {
         let color = marker.color();
         let marker_type = marker.marker_type();
         let paint = Self::solid_paint(color);
+        let transform = self.scale_transform();
         let mask = self.build_clip_mask();
 
         // Marker types: disc=0, circle=1, square=2, others are numbered
@@ -634,7 +690,7 @@ impl DocumentContainer for PixbufContainer {
                         &path,
                         &paint,
                         FillRule::Winding,
-                        Transform::identity(),
+                        transform,
                         mask.as_ref(),
                     );
                 }
@@ -649,20 +705,15 @@ impl DocumentContainer for PixbufContainer {
                         width: 1.0,
                         ..Stroke::default()
                     };
-                    self.pixmap.stroke_path(
-                        &path,
-                        &paint,
-                        &stroke,
-                        Transform::identity(),
-                        mask.as_ref(),
-                    );
+                    self.pixmap
+                        .stroke_path(&path, &paint, &stroke, transform, mask.as_ref());
                 }
             }
             2 => {
                 // Square: filled rectangle
                 if let Some(rect) = Rect::from_xywh(pos.x, pos.y, pos.width, pos.height) {
                     self.pixmap
-                        .fill_rect(rect, &paint, Transform::identity(), mask.as_ref());
+                        .fill_rect(rect, &paint, transform, mask.as_ref());
                 }
             }
             _ => {
@@ -696,11 +747,12 @@ impl DocumentContainer for PixbufContainer {
         };
         let clip = layer.clip_box();
         let border = layer.border_box();
+        let s = self.scale_factor;
         let mask = self.build_clip_mask();
 
-        // Determine source and destination
-        let dst_x = border.x as i32;
-        let dst_y = border.y as i32;
+        // Scale logical positions to physical pixel coords
+        let dst_x = (border.x * s) as i32;
+        let dst_y = (border.y * s) as i32;
 
         let img_paint = tiny_skia::PixmapPaint {
             opacity: 1.0,
@@ -708,13 +760,15 @@ impl DocumentContainer for PixbufContainer {
             quality: tiny_skia::FilterQuality::Bilinear,
         };
 
-        // Use clip_box to limit drawing area via a clip mask
+        // Use clip_box to limit drawing area via a clip mask (in physical coords)
         let combined_mask = if clip.width > 0.0 && clip.height > 0.0 {
             let w = self.pixmap.width();
             let h = self.pixmap.height();
             let mut m = tiny_skia::Mask::new(w, h);
             if let Some(ref mut m) = m {
-                if let Some(rect) = Rect::from_xywh(clip.x, clip.y, clip.width, clip.height) {
+                if let Some(rect) =
+                    Rect::from_xywh(clip.x * s, clip.y * s, clip.width * s, clip.height * s)
+                {
                     m.fill_path(
                         &PathBuilder::from_rect(rect),
                         FillRule::Winding,
@@ -749,18 +803,14 @@ impl DocumentContainer for PixbufContainer {
         let border = layer.border_box();
         let radii = layer.border_radius();
         let paint = Self::solid_paint(color);
+        let transform = self.scale_transform();
         let mask = self.build_clip_mask();
 
         if let Some(path) =
             build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
         {
-            self.pixmap.fill_path(
-                &path,
-                &paint,
-                FillRule::Winding,
-                Transform::identity(),
-                mask.as_ref(),
-            );
+            self.pixmap
+                .fill_path(&path, &paint, FillRule::Winding, transform, mask.as_ref());
         }
     }
 
@@ -776,10 +826,10 @@ impl DocumentContainer for PixbufContainer {
         let end = gradient.end();
         let points = gradient.color_points();
         let stops = color_points_to_stops(&points);
+        let transform = self.scale_transform();
         let mask = self.build_clip_mask();
 
         if stops.len() < 2 {
-            // Fall back to solid color with the first stop
             if let Some(cp) = points.first() {
                 self.draw_solid_fill(0, layer, cp.color);
             }
@@ -791,7 +841,7 @@ impl DocumentContainer for PixbufContainer {
             tiny_skia::Point::from_xy(border.x + end.x, border.y + end.y),
             stops,
             SpreadMode::Pad,
-            Transform::identity(),
+            transform,
         );
 
         if let Some(shader) = shader {
@@ -804,13 +854,8 @@ impl DocumentContainer for PixbufContainer {
             if let Some(path) =
                 build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
             {
-                self.pixmap.fill_path(
-                    &path,
-                    &paint,
-                    FillRule::Winding,
-                    Transform::identity(),
-                    mask.as_ref(),
-                );
+                self.pixmap
+                    .fill_path(&path, &paint, FillRule::Winding, transform, mask.as_ref());
             }
         }
     }
@@ -827,6 +872,7 @@ impl DocumentContainer for PixbufContainer {
         let radius = gradient.radius();
         let points = gradient.color_points();
         let stops = color_points_to_stops(&points);
+        let transform = self.scale_transform();
         let mask = self.build_clip_mask();
 
         if stops.len() < 2 {
@@ -846,7 +892,7 @@ impl DocumentContainer for PixbufContainer {
             r,
             stops,
             SpreadMode::Pad,
-            Transform::identity(),
+            transform,
         );
 
         if let Some(shader) = shader {
@@ -859,13 +905,8 @@ impl DocumentContainer for PixbufContainer {
             if let Some(path) =
                 build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
             {
-                self.pixmap.fill_path(
-                    &path,
-                    &paint,
-                    FillRule::Winding,
-                    Transform::identity(),
-                    mask.as_ref(),
-                );
+                self.pixmap
+                    .fill_path(&path, &paint, FillRule::Winding, transform, mask.as_ref());
             }
         }
     }
@@ -885,6 +926,7 @@ impl DocumentContainer for PixbufContainer {
     }
 
     fn draw_borders(&mut self, _hdc: usize, borders: &Borders, draw_pos: Position, _root: bool) {
+        let transform = self.scale_transform();
         let mask = self.build_clip_mask();
         let x = draw_pos.x;
         let y = draw_pos.y;
@@ -901,6 +943,7 @@ impl DocumentContainer for PixbufContainer {
             w,
             borders.top.width,
             true,
+            transform,
         );
 
         draw_border_side(
@@ -912,6 +955,7 @@ impl DocumentContainer for PixbufContainer {
             w,
             borders.bottom.width,
             true,
+            transform,
         );
 
         draw_border_side(
@@ -923,6 +967,7 @@ impl DocumentContainer for PixbufContainer {
             borders.left.width,
             h,
             false,
+            transform,
         );
 
         draw_border_side(
@@ -934,6 +979,7 @@ impl DocumentContainer for PixbufContainer {
             borders.right.width,
             h,
             false,
+            transform,
         );
     }
 
@@ -966,12 +1012,12 @@ impl DocumentContainer for PixbufContainer {
             media_type: MediaType::Screen,
             width: self.viewport.width,
             height: self.viewport.height,
-            device_width: self.viewport.width,
-            device_height: self.viewport.height,
+            device_width: self.viewport.width * self.scale_factor,
+            device_height: self.viewport.height * self.scale_factor,
             color: 8,
             color_index: 0,
             monochrome: 0,
-            resolution: 96.0,
+            resolution: 96.0 * self.scale_factor,
         }
     }
 
@@ -1075,6 +1121,7 @@ fn draw_border_side(
     w: f32,
     h: f32,
     horizontal: bool,
+    transform: Transform,
 ) {
     if border.width <= 0.0 || matches!(border.style, BorderStyle::None | BorderStyle::Hidden) {
         return;
@@ -1099,11 +1146,10 @@ fn draw_border_side(
         | BorderStyle::Inset
         | BorderStyle::Outset => {
             if let Some(rect) = Rect::from_xywh(x, y, w.max(0.001), h.max(0.001)) {
-                pixmap.fill_rect(rect, &paint, Transform::identity(), mask);
+                pixmap.fill_rect(rect, &paint, transform, mask);
             }
         }
         BorderStyle::Dashed => {
-            // Dashed border: use a stroked path with dash pattern
             let mut pb = PathBuilder::new();
             if horizontal {
                 let mid_y = y + h / 2.0;
@@ -1121,11 +1167,10 @@ fn draw_border_side(
                     dash: StrokeDash::new(vec![dash_len, dash_len], 0.0),
                     ..Stroke::default()
                 };
-                pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), mask);
+                pixmap.stroke_path(&path, &paint, &stroke, transform, mask);
             }
         }
         BorderStyle::Dotted => {
-            // Dotted border: use a stroked path with dot pattern
             let mut pb = PathBuilder::new();
             if horizontal {
                 let mid_y = y + h / 2.0;
@@ -1144,7 +1189,7 @@ fn draw_border_side(
                     dash: StrokeDash::new(vec![0.001, dot * 2.0], 0.0),
                     ..Stroke::default()
                 };
-                pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), mask);
+                pixmap.stroke_path(&path, &paint, &stroke, transform, mask);
             }
         }
         BorderStyle::None | BorderStyle::Hidden => {}
@@ -1175,6 +1220,29 @@ fn build_circle_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
 /// lays it out, and draws it, returning the raw pixel data.
 pub fn render_to_rgba(html: &str, width: u32, height: u32) -> Vec<u8> {
     let mut container = PixbufContainer::new(width, height);
+    if let Ok(mut doc) = crate::Document::from_html(html, &mut container, None, None) {
+        let _ = doc.render(width as f32);
+        doc.draw(
+            0,
+            0.0,
+            0.0,
+            Some(Position {
+                x: 0.0,
+                y: 0.0,
+                width: width as f32,
+                height: height as f32,
+            }),
+        );
+    }
+    container.pixels().to_vec()
+}
+
+/// Render HTML to an RGBA pixel buffer at a given scale factor.
+///
+/// `width` and `height` are logical dimensions. The returned buffer has
+/// physical dimensions (`width * scale_factor`, `height * scale_factor`).
+pub fn render_to_rgba_scaled(html: &str, width: u32, height: u32, scale_factor: f32) -> Vec<u8> {
+    let mut container = PixbufContainer::new_with_scale(width, height, scale_factor);
     if let Ok(mut doc) = crate::Document::from_html(html, &mut container, None, None) {
         let _ = doc.render(width as f32);
         doc.draw(
