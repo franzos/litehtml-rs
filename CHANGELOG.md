@@ -1,3 +1,9 @@
+## [0.1.2] - 2026-02-16
+
+### Added
+- Support text selection
+- Support for HiDPI rendering
+ 
 ## [0.1.1] - 2026-02-16
 
 ### Added
