@@ -1,6 +1,6 @@
 [package]
 name = "litehtml"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 authors = ["Franz Geffke <mail@gofranz.com>"]
@@ -8,16 +8,18 @@ description = "Safe Rust bindings for litehtml — a lightweight HTML/CSS render
 repository = "https://github.com/franzos/litehtml-rs"
 keywords = ["litehtml", "html", "css", "rendering", "email"]
 categories = ["rendering", "web-programming"]
+readme = "README.md"
 exclude = ["tests/", "examples/"]
 
 [features]
 default = ["vendored"]
 vendored = ["litehtml-sys/vendored"]
 pixbuf = ["tiny-skia", "cosmic-text", "image"]
-email = ["encoding_rs", "base64"]
+html = ["encoding_rs", "base64"]
+email = ["html"]
 
 [dependencies]
-litehtml-sys = { path = "../litehtml-sys", version = "0.1.0", default-features = false }
+litehtml-sys = { path = "../litehtml-sys", version = "0.2.0", default-features = false }
 log = "0.4"
 tiny-skia = { version = "0.11", optional = true }
 cosmic-text = { version = "0.14", optional = true }

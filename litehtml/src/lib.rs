@@ -2062,6 +2062,9 @@ pub mod selection;
 #[cfg(feature = "pixbuf")]
 pub mod pixbuf;
 
+#[cfg(feature = "html")]
+pub mod html;
+
 #[cfg(feature = "email")]
 pub mod email;
 

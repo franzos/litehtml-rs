@@ -1,6 +1,6 @@
 [package]
 name = "litehtml-sys"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 license = "MIT AND BSD-3-Clause AND Apache-2.0"
 authors = ["Franz Geffke <mail@gofranz.com>"]
@@ -8,6 +8,7 @@ description = "Raw FFI bindings for litehtml (C++ HTML/CSS rendering engine)"
 repository = "https://github.com/franzos/litehtml-rs"
 keywords = ["litehtml", "html", "css", "ffi", "rendering"]
 categories = ["external-ffi-bindings", "rendering"]
+readme = "README.md"
 exclude = ["tests/"]
 
 [features]

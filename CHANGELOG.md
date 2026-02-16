@@ -1,3 +1,9 @@
+## [0.2.0] - 2026-02-16
+
+## Changed
+
+- Move away from Email focus, to general-purpose HTML
+
 ## [0.1.2] - 2026-02-16
 
 ### Added

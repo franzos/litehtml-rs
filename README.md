@@ -1,5 +1,7 @@
 # litehtml-rs
 
+[![crates.io](https://img.shields.io/crates/v/litehtml.svg)](https://crates.io/crates/litehtml)
+
 Rust bindings for [litehtml](https://github.com/litehtml/litehtml) -- a lightweight HTML/CSS rendering engine.
 
 ## Crates
@@ -15,7 +17,8 @@ The `litehtml` crate has these feature flags:
 
 - **`vendored`** (default) -- compile litehtml from bundled source. Disable to link against a system-installed litehtml (set `LITEHTML_DIR` or ensure headers/lib are on the search path).
 - **`pixbuf`** -- CPU-based pixel buffer backend using `tiny-skia` and `cosmic-text`. Gives you `PixbufContainer` and `render_to_rgba()`.
-- **`email`** -- Email preprocessing pipeline: encoding detection, HTML sanitization, `data:`/`cid:` image resolution, attribute preprocessing.
+- **`html`** -- General-purpose HTML utilities: encoding detection, sanitization, `data:`/`cid:` URI resolution, legacy attribute preprocessing, and a `prepare_html` pipeline.
+- **`email`** -- Email-specific defaults on top of `html`: `EMAIL_MASTER_CSS` and a `prepare_email_html` convenience wrapper.
 
 ## Usage
 
@@ -45,7 +48,7 @@ With direnv (GUIX -- see `.envrc`):
 
 ```bash
 direnv allow
-cargo test --workspace --features 'litehtml/pixbuf,litehtml/email'
+cargo test --workspace --features 'litehtml/pixbuf,litehtml/html'
 ```
 
 Without direnv:
@@ -72,18 +75,30 @@ cargo run --example render --features pixbuf -p litehtml -- examples/email.html 
 
 Scroll with mouse wheel, arrow keys, Page Up/Down, Home/End. Escape to close. Optional second argument sets the viewport width (default 800).
 
-## Email rendering
+## HTML preprocessing
 
-The `email` feature provides a full preprocessing pipeline for rendering email HTML:
+The `html` feature provides a full preprocessing pipeline for rendering HTML:
 
 ```rust
-use litehtml::email::{prepare_email_html, EMAIL_MASTER_CSS};
+use litehtml::html::{prepare_html, sanitize_html, decode_html};
 
-let prepared = prepare_email_html(raw_bytes, Some(&cid_resolver));
+let prepared = prepare_html(raw_bytes, Some(&cid_resolver), None);
 // prepared.html -- sanitized UTF-8 HTML
 // prepared.images -- resolved data:/cid: images
 ```
 
-This handles encoding detection (UTF-8, Windows-1252, ISO-8859-1), strips dangerous elements (`<script>`, `<iframe>`, event handlers), resolves inline images, and preprocesses legacy email attributes (`bgcolor` on `<body>`, `cellpadding`).
+This handles encoding detection (UTF-8, Windows-1252, ISO-8859-1), strips dangerous elements (`<script>`, `<iframe>`, event handlers), resolves inline images, and preprocesses legacy attributes (`bgcolor` on `<body>`, `cellpadding`).
 
-Remote image fetching is off by default - tracking pixels are the norm in marketing email. Pass a `url_fetcher` closure to `prepare_email_html` to opt in with your own HTTP client.
+Remote image fetching is off by default. Pass a `url_fetcher` closure as the third argument to opt in with your own HTTP client.
+
+## Email rendering
+
+The `email` feature adds email-specific defaults on top of `html`:
+
+```rust
+use litehtml::email::{prepare_email_html, EMAIL_MASTER_CSS};
+
+let prepared = prepare_email_html(raw_bytes, Some(&cid_resolver), None);
+```
+
+`EMAIL_MASTER_CSS` provides an email user-agent stylesheet (body reset, responsive images, table normalization, MSO workarounds).
