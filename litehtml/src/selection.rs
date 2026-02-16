@@ -212,7 +212,7 @@ impl<'doc> Selection<'doc> {
             let needs_update = self
                 .order_cache
                 .as_ref()
-                .map_or(true, |c| c.a != start.element || c.b != end.element);
+                .is_none_or(|c| c.a != start.element || c.b != end.element);
             if needs_update {
                 let a_before_b = is_before(&start.element(), &end.element());
                 self.order_cache = Some(OrderCache {

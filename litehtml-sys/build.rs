@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -20,7 +20,7 @@ fn main() {
 }
 
 /// Build from vendored C++ source in vendor/litehtml
-fn build_vendored(manifest_dir: &PathBuf, out_dir: &PathBuf, csrc_dir: &PathBuf) {
+fn build_vendored(manifest_dir: &Path, out_dir: &Path, csrc_dir: &Path) {
     let vendor_dir = manifest_dir.join("vendor/litehtml");
     let gumbo_src = vendor_dir.join("src/gumbo");
     let gumbo_include = gumbo_src.join("include");
@@ -154,7 +154,7 @@ fn build_vendored(manifest_dir: &PathBuf, out_dir: &PathBuf, csrc_dir: &PathBuf)
 }
 
 /// Build against system-installed litehtml
-fn build_system(out_dir: &PathBuf, csrc_dir: &PathBuf) {
+fn build_system(out_dir: &Path, csrc_dir: &Path) {
     // Find system litehtml via LITEHTML_DIR or common paths
     let litehtml_dir = env::var("LITEHTML_DIR").ok().map(PathBuf::from);
 
@@ -238,12 +238,7 @@ fn find_library(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn generate_bindings(
-    csrc_dir: &PathBuf,
-    out_dir: &PathBuf,
-    vendored: bool,
-    manifest_dir: &PathBuf,
-) {
+fn generate_bindings(csrc_dir: &Path, out_dir: &Path, vendored: bool, manifest_dir: &Path) {
     let mut builder = bindgen::Builder::default()
         .header(csrc_dir.join("litehtml_c.h").to_str().unwrap())
         .allowlist_function("lh_.*")

@@ -136,25 +136,13 @@ impl Default for Border {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Borders {
     pub left: Border,
     pub top: Border,
     pub right: Border,
     pub bottom: Border,
     pub radius: BorderRadiuses,
-}
-
-impl Default for Borders {
-    fn default() -> Self {
-        Self {
-            left: Border::default(),
-            top: Border::default(),
-            right: Border::default(),
-            bottom: Border::default(),
-            radius: BorderRadiuses::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -593,17 +581,12 @@ impl TextDecorationStyle {
 }
 
 /// CSS `text-decoration-thickness` computed value.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum DecorationThickness {
+    #[default]
     Auto,
     FromFont,
     Length(f32),
-}
-
-impl Default for DecorationThickness {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1343,7 +1326,7 @@ unsafe extern "C" fn cb_get_default_font_name(user_data: *mut c_void) -> *const 
         let bridge = bridge_from_user_data(user_data);
         bridge.default_font_name.as_ptr()
     }))
-    .unwrap_or(b"serif\0".as_ptr().cast::<c_char>())
+    .unwrap_or(c"serif".as_ptr())
 }
 
 unsafe extern "C" fn cb_draw_list_marker(
