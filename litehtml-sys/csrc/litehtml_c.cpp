@@ -7,6 +7,7 @@
 
 #include "litehtml_c.h"
 #include <litehtml.h>
+#include <litehtml/render_item.h>
 #include <cstring>
 #include <string>
 
@@ -1121,6 +1122,156 @@ int lh_document_media_changed(lh_document_t* doc)
     if (!doc) return 0;
     auto* internal = reinterpret_cast<lh_document_internal*>(doc);
     return internal->doc->media_changed() ? 1 : 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Element introspection
+ * -------------------------------------------------------------------------- */
+
+lh_element_t* lh_element_parent(lh_element_t* el)
+{
+    if (!el) return nullptr;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    auto parent = elem->parent();
+    if (!parent) return nullptr;
+    return reinterpret_cast<lh_element_t*>(parent.get());
+}
+
+int lh_element_children_count(lh_element_t* el)
+{
+    if (!el) return 0;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    return static_cast<int>(elem->children().size());
+}
+
+lh_element_t* lh_element_child_at(lh_element_t* el, int index)
+{
+    if (!el) return nullptr;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    const auto& kids = elem->children();
+    if (index < 0 || index >= static_cast<int>(kids.size()))
+        return nullptr;
+    auto it = kids.begin();
+    std::advance(it, index);
+    return reinterpret_cast<lh_element_t*>(it->get());
+}
+
+int lh_element_is_text(lh_element_t* el)
+{
+    if (!el) return 0;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    return elem->is_text() ? 1 : 0;
+}
+
+uintptr_t lh_element_get_font(lh_element_t* el)
+{
+    if (!el) return 0;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    return elem->css().get_font();
+}
+
+float lh_element_get_font_size(lh_element_t* el)
+{
+    if (!el) return 0.0f;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    return elem->css().get_font_size();
+}
+
+void lh_element_get_placement(lh_element_t* el, lh_position_t* pos)
+{
+    if (!el || !pos) return;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    litehtml::position p = elem->get_placement();
+    *pos = to_c(p);
+}
+
+void lh_element_get_text(lh_element_t* el,
+                         void (*cb)(void* ctx, const char* text),
+                         void* ctx)
+{
+    if (!el || !cb) return;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    litehtml::string text;
+    elem->get_text(text);
+    cb(ctx, text.c_str());
+}
+
+lh_element_t* lh_document_get_element_by_point(lh_document_t* doc,
+                                                float x, float y,
+                                                float client_x, float client_y)
+{
+    if (!doc) return nullptr;
+    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+    auto root_render = internal->doc->root_render();
+    if (!root_render) return nullptr;
+    auto el = root_render->get_element_by_point(x, y, client_x, client_y,
+        [](const std::shared_ptr<litehtml::render_item>&) { return true; });
+    if (!el) return nullptr;
+    return reinterpret_cast<lh_element_t*>(el.get());
+}
+
+/* --------------------------------------------------------------------------
+ * Inline box helpers
+ *
+ * get_inline_boxes() returns local-coordinate boxes from the render item.
+ * We compute the same parent-chain offset that get_placement() uses, then
+ * apply it to each box so callers get absolute document coordinates.
+ * -------------------------------------------------------------------------- */
+
+/* Compute parent-chain offset: placement.{x,y} - m_pos.{x,y} */
+static void compute_ri_offset(const std::shared_ptr<litehtml::render_item>& ri,
+                               float& ox, float& oy)
+{
+    litehtml::position placement = ri->get_placement();
+    litehtml::position pos = ri->pos();
+    ox = placement.x - pos.x;
+    oy = placement.y - pos.y;
+}
+
+int lh_element_get_inline_boxes_count(lh_element_t* el)
+{
+    if (!el) return 0;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    auto ri = elem->get_render_item();
+    if (!ri) return 0;
+    litehtml::position::vector boxes;
+    ri->get_inline_boxes(boxes);
+    return static_cast<int>(boxes.size());
+}
+
+void lh_element_get_inline_box_at(lh_element_t* el, int index, lh_position_t* pos)
+{
+    if (!el || !pos) return;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    auto ri = elem->get_render_item();
+    if (!ri) return;
+
+    litehtml::position::vector boxes;
+    ri->get_inline_boxes(boxes);
+    if (index < 0 || index >= static_cast<int>(boxes.size()))
+        return;
+
+    float ox, oy;
+    compute_ri_offset(ri, ox, oy);
+
+    litehtml::position box = boxes[index];
+    box.x += ox;
+    box.y += oy;
+    *pos = to_c(box);
+}
+
+int lh_element_get_text_align(lh_element_t* el)
+{
+    if (!el) return 0;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    return static_cast<int>(elem->css().get_text_align());
+}
+
+float lh_element_get_line_height(lh_element_t* el)
+{
+    if (!el) return 0.0f;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    return elem->css().line_height().computed_value;
 }
 
 } /* extern "C" */

@@ -335,6 +335,53 @@ void lh_document_add_stylesheet(lh_document_t* doc,
 /* Get the root element of the document. Returns NULL if doc is NULL. */
 lh_element_t* lh_document_root(lh_document_t* doc);
 
+/* --------------------------------------------------------------------------
+ * Element introspection
+ * -------------------------------------------------------------------------- */
+
+/* Get the parent element. Returns NULL for root or if el is NULL. */
+lh_element_t* lh_element_parent(lh_element_t* el);
+
+/* Number of child elements. Returns 0 if el is NULL. */
+int lh_element_children_count(lh_element_t* el);
+
+/* Get the child at the given index. Returns NULL if out of bounds. */
+lh_element_t* lh_element_child_at(lh_element_t* el, int index);
+
+/* Returns non-zero if the element is a text node. */
+int lh_element_is_text(lh_element_t* el);
+
+/* Get the font handle from the element's computed CSS. Returns 0 on error. */
+uintptr_t lh_element_get_font(lh_element_t* el);
+
+/* Get the font size from the element's computed CSS. Returns 0.0 on error. */
+float lh_element_get_font_size(lh_element_t* el);
+
+/* Get the element's absolute pixel bounding box after layout. */
+void lh_element_get_placement(lh_element_t* el, lh_position_t* pos);
+
+/* Get the element's recursive text content via callback. */
+void lh_element_get_text(lh_element_t* el,
+                         void (*cb)(void* ctx, const char* text),
+                         void* ctx);
+
+/* Hit testing: find the deepest element at document coordinates (x, y). */
+lh_element_t* lh_document_get_element_by_point(lh_document_t* doc,
+                                                float x, float y,
+                                                float client_x, float client_y);
+
+/* Number of per-line inline boxes for a rendered element (0 if not inline). */
+int lh_element_get_inline_boxes_count(lh_element_t* el);
+
+/* Get the i-th inline box in absolute document coordinates. */
+void lh_element_get_inline_box_at(lh_element_t* el, int index, lh_position_t* pos);
+
+/* Get the computed text-align value (0=left, 1=right, 2=center, 3=justify). */
+int lh_element_get_text_align(lh_element_t* el);
+
+/* Get the computed line-height in pixels. */
+float lh_element_get_line_height(lh_element_t* el);
+
 /* Parse an HTML fragment and append the resulting elements as children of parent.
    If replace_existing is non-zero, existing children are removed first.
    Requires a subsequent render() to update layout. */

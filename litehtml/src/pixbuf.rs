@@ -7,6 +7,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use cosmic_text::{Attrs, Family, Metrics, Shaping, Style, Weight};
 use tiny_skia::{
@@ -37,9 +38,9 @@ struct FontData {
 pub struct PixbufContainer {
     pixmap: tiny_skia::Pixmap,
     // RefCell because `text_width` takes `&self` but cosmic-text needs `&mut`
-    font_system: RefCell<cosmic_text::FontSystem>,
+    font_system: Rc<RefCell<cosmic_text::FontSystem>>,
     swash_cache: RefCell<cosmic_text::SwashCache>,
-    fonts: HashMap<usize, FontData>,
+    fonts: Rc<RefCell<HashMap<usize, FontData>>>,
     next_font_id: usize,
     clip_stack: Vec<(Position, BorderRadiuses)>,
     images: HashMap<String, tiny_skia::Pixmap>,
@@ -57,9 +58,9 @@ impl PixbufContainer {
             tiny_skia::Pixmap::new(width.max(1), height.max(1)).expect("failed to create pixmap");
         Self {
             pixmap,
-            font_system: RefCell::new(cosmic_text::FontSystem::new()),
+            font_system: Rc::new(RefCell::new(cosmic_text::FontSystem::new())),
             swash_cache: RefCell::new(cosmic_text::SwashCache::new()),
-            fonts: HashMap::new(),
+            fonts: Rc::new(RefCell::new(HashMap::new())),
             next_font_id: 1,
             clip_stack: Vec::new(),
             images: HashMap::new(),
@@ -117,6 +118,25 @@ impl PixbufContainer {
         }
     }
 
+    /// Draw selection highlight rectangles as a semi-transparent overlay.
+    ///
+    /// Call this **after** `doc.draw()` to render the selection on top.
+    pub fn draw_selection_rects(&mut self, rects: &[crate::Position]) {
+        let highlight = tiny_skia::Color::from_rgba8(100, 150, 255, 80);
+        let paint = Paint {
+            shader: Shader::SolidColor(highlight),
+            anti_alias: false,
+            ..Paint::default()
+        };
+        let mask = self.build_clip_mask();
+        for rect in rects {
+            if let Some(r) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
+                self.pixmap
+                    .fill_rect(r, &paint, Transform::identity(), mask.as_ref());
+            }
+        }
+    }
+
     /// Resize the pixmap, clearing all existing content.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.pixmap =
@@ -168,22 +188,6 @@ impl PixbufContainer {
         }
     }
 
-    /// Create cosmic-text Attrs from internal font data.
-    fn attrs_from_font<'a>(font: &'a FontData) -> Attrs<'a> {
-        let family = match font.family.as_str() {
-            "serif" => Family::Serif,
-            "sans-serif" | "sans serif" => Family::SansSerif,
-            "monospace" => Family::Monospace,
-            "cursive" => Family::Cursive,
-            "fantasy" => Family::Fantasy,
-            name => Family::Name(name),
-        };
-        Attrs::new()
-            .family(family)
-            .weight(font.weight)
-            .style(font.style)
-    }
-
     /// Measure a string of text using cosmic-text, returning total width.
     fn measure_text(&self, text: &str, font: &FontData) -> f32 {
         let mut fs = self.font_system.borrow_mut();
@@ -191,12 +195,53 @@ impl PixbufContainer {
         let metrics = Metrics::new(font.size, line_height);
         let mut buffer = cosmic_text::Buffer::new(&mut fs, metrics);
         buffer.set_size(&mut fs, Some(f32::MAX), Some(line_height));
-        let attrs = Self::attrs_from_font(font);
+        let attrs = attrs_from_font(font);
         buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
         buffer.shape_until_scroll(&mut fs, false);
 
         buffer.layout_runs().map(|run| run.line_w).sum::<f32>()
     }
+
+    /// Return a closure that measures text width for a given font handle.
+    ///
+    /// The closure captures shared references to the font system and font map,
+    /// so it can be used independently of `&self` (e.g. passed into litehtml
+    /// callbacks).
+    pub fn text_measure_fn(&self) -> impl Fn(&str, usize) -> f32 {
+        let fonts = Rc::clone(&self.fonts);
+        let font_system = Rc::clone(&self.font_system);
+        move |text: &str, font: usize| -> f32 {
+            let fonts_ref = fonts.borrow();
+            let Some(font_data) = fonts_ref.get(&font) else {
+                return text.len() as f32 * 8.0;
+            };
+            let mut fs = font_system.borrow_mut();
+            let line_height = font_data.metrics.height;
+            let metrics = Metrics::new(font_data.size, line_height);
+            let mut buffer = cosmic_text::Buffer::new(&mut fs, metrics);
+            buffer.set_size(&mut fs, Some(f32::MAX), Some(line_height));
+            let attrs = attrs_from_font(font_data);
+            buffer.set_text(&mut fs, text, &attrs, Shaping::Advanced);
+            buffer.shape_until_scroll(&mut fs, false);
+            buffer.layout_runs().map(|run| run.line_w).sum::<f32>()
+        }
+    }
+}
+
+/// Create cosmic-text `Attrs` from internal font data.
+fn attrs_from_font<'a>(font: &'a FontData) -> Attrs<'a> {
+    let family = match font.family.as_str() {
+        "serif" => Family::Serif,
+        "sans-serif" | "sans serif" => Family::SansSerif,
+        "monospace" => Family::Monospace,
+        "cursive" => Family::Cursive,
+        "fantasy" => Family::Fantasy,
+        name => Family::Name(name),
+    };
+    Attrs::new()
+        .family(family)
+        .weight(font.weight)
+        .style(font.style)
 }
 
 /// Intersect two masks by taking the minimum alpha of each pixel.
@@ -408,7 +453,7 @@ impl DocumentContainer for PixbufContainer {
             super_shift: size * 0.4,
         };
 
-        self.fonts.insert(
+        self.fonts.borrow_mut().insert(
             id,
             FontData {
                 family: family_str,
@@ -423,24 +468,26 @@ impl DocumentContainer for PixbufContainer {
     }
 
     fn delete_font(&mut self, font: usize) {
-        self.fonts.remove(&font);
+        self.fonts.borrow_mut().remove(&font);
     }
 
     fn text_width(&self, text: &str, font: usize) -> f32 {
-        let Some(font_data) = self.fonts.get(&font) else {
+        let fonts = self.fonts.borrow();
+        let Some(font_data) = fonts.get(&font) else {
             return text.len() as f32 * 8.0;
         };
         self.measure_text(text, font_data)
     }
 
     fn draw_text(&mut self, _hdc: usize, text: &str, font: usize, color: Color, pos: Position) {
-        let Some(font_data) = self.fonts.get(&font) else {
+        let fonts = self.fonts.borrow();
+        let Some(font_data) = fonts.get(&font) else {
             return;
         };
 
         let line_height = font_data.metrics.height;
         let ct_metrics = Metrics::new(font_data.size, line_height);
-        let attrs = Self::attrs_from_font(font_data);
+        let attrs = attrs_from_font(font_data);
         let mask = self.build_clip_mask();
 
         let mut fs = self.font_system.borrow_mut();

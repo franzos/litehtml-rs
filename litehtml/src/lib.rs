@@ -659,8 +659,7 @@ impl<'a> FontDescription<'a> {
         let is_predef =
             unsafe { sys::lh_font_description_decoration_thickness_is_predefined(self.ptr) };
         if is_predef != 0 {
-            let predef =
-                unsafe { sys::lh_font_description_decoration_thickness_predef(self.ptr) };
+            let predef = unsafe { sys::lh_font_description_decoration_thickness_predef(self.ptr) };
             match predef {
                 1 => DecorationThickness::FromFont,
                 _ => DecorationThickness::Auto,
@@ -897,9 +896,7 @@ impl<'a> LinearGradient<'a> {
     }
 
     pub fn hue_interpolation(&self) -> HueInterpolation {
-        HueInterpolation::from_c_int(unsafe {
-            sys::lh_linear_gradient_hue_interpolation(self.ptr)
-        })
+        HueInterpolation::from_c_int(unsafe { sys::lh_linear_gradient_hue_interpolation(self.ptr) })
     }
 }
 
@@ -961,9 +958,7 @@ impl<'a> RadialGradient<'a> {
     }
 
     pub fn hue_interpolation(&self) -> HueInterpolation {
-        HueInterpolation::from_c_int(unsafe {
-            sys::lh_radial_gradient_hue_interpolation(self.ptr)
-        })
+        HueInterpolation::from_c_int(unsafe { sys::lh_radial_gradient_hue_interpolation(self.ptr) })
     }
 }
 
@@ -1029,9 +1024,7 @@ impl<'a> ConicGradient<'a> {
     }
 
     pub fn hue_interpolation(&self) -> HueInterpolation {
-        HueInterpolation::from_c_int(unsafe {
-            sys::lh_conic_gradient_hue_interpolation(self.ptr)
-        })
+        HueInterpolation::from_c_int(unsafe { sys::lh_conic_gradient_hue_interpolation(self.ptr) })
     }
 }
 
@@ -1687,6 +1680,136 @@ pub struct Element<'a> {
     _phantom: PhantomData<&'a ()>,
 }
 
+impl<'a> Element<'a> {
+    /// Get the parent element. Returns `None` for the root element.
+    pub fn parent(&self) -> Option<Element<'a>> {
+        let ptr = unsafe { sys::lh_element_parent(self.ptr) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(Element {
+                ptr,
+                _phantom: PhantomData,
+            })
+        }
+    }
+
+    /// Number of child elements.
+    pub fn children_count(&self) -> usize {
+        unsafe { sys::lh_element_children_count(self.ptr) as usize }
+    }
+
+    /// Get the child at `index`. Returns `None` if out of bounds.
+    pub fn child_at(&self, index: usize) -> Option<Element<'a>> {
+        let ptr = unsafe { sys::lh_element_child_at(self.ptr, index as i32) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(Element {
+                ptr,
+                _phantom: PhantomData,
+            })
+        }
+    }
+
+    /// Returns `true` if this element is a text node.
+    pub fn is_text(&self) -> bool {
+        unsafe { sys::lh_element_is_text(self.ptr) != 0 }
+    }
+
+    /// Font handle from the element's computed CSS.
+    pub fn font(&self) -> usize {
+        unsafe { sys::lh_element_get_font(self.ptr) }
+    }
+
+    /// Font size from the element's computed CSS.
+    pub fn font_size(&self) -> f32 {
+        unsafe { sys::lh_element_get_font_size(self.ptr) }
+    }
+
+    /// Absolute pixel bounding box after layout.
+    pub fn placement(&self) -> Position {
+        let mut pos = sys::lh_position_t {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        };
+        unsafe {
+            sys::lh_element_get_placement(self.ptr, &mut pos);
+        }
+        Position::from(pos)
+    }
+
+    /// Recursive text content of this element and its children.
+    pub fn get_text(&self) -> String {
+        unsafe extern "C" fn text_callback(ctx: *mut c_void, text: *const c_char) {
+            if text.is_null() || ctx.is_null() {
+                return;
+            }
+            let result = &mut *(ctx as *mut String);
+            if let Ok(s) = CStr::from_ptr(text).to_str() {
+                result.push_str(s);
+            }
+        }
+
+        let mut result = String::new();
+        unsafe {
+            sys::lh_element_get_text(
+                self.ptr,
+                Some(text_callback),
+                &mut result as *mut String as *mut c_void,
+            );
+        }
+        result
+    }
+
+    /// Number of per-line inline boxes (0 if not an inline element).
+    pub fn inline_boxes_count(&self) -> usize {
+        unsafe { sys::lh_element_get_inline_boxes_count(self.ptr) as usize }
+    }
+
+    /// Get the i-th inline box in absolute document coordinates.
+    pub fn inline_box_at(&self, index: usize) -> Option<Position> {
+        let count = self.inline_boxes_count();
+        if index >= count {
+            return None;
+        }
+        let mut pos = sys::lh_position_t {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        };
+        unsafe {
+            sys::lh_element_get_inline_box_at(self.ptr, index as i32, &mut pos);
+        }
+        Some(Position::from(pos))
+    }
+
+    /// All per-line inline boxes in absolute document coordinates.
+    pub fn inline_boxes(&self) -> Vec<Position> {
+        let count = self.inline_boxes_count();
+        (0..count).filter_map(|i| self.inline_box_at(i)).collect()
+    }
+
+    /// Computed text-align: 0=left, 1=right, 2=center, 3=justify.
+    pub fn text_align(&self) -> i32 {
+        unsafe { sys::lh_element_get_text_align(self.ptr) }
+    }
+
+    /// Computed line-height in pixels.
+    pub fn line_height(&self) -> f32 {
+        unsafe { sys::lh_element_get_line_height(self.ptr) }
+    }
+
+    /// Raw pointer to the underlying C element. Valid while the parent
+    /// `Document` is alive.
+    pub(crate) fn as_ptr(&self) -> *mut sys::lh_element_t {
+        self.ptr
+    }
+}
+
 /// A parsed HTML document. Wraps the C++ `litehtml::document` and ties its
 /// lifetime to the [`DocumentContainer`] that provides rendering callbacks.
 ///
@@ -1751,8 +1874,7 @@ impl<'a> Document<'a> {
 
         // SAFETY: the C++ side only reads through this pointer (never writes).
         // See CDocumentContainer in litehtml_c.cpp — all vtable access is read-only.
-        let vtable_ptr =
-            std::ptr::addr_of!(CONTAINER_VTABLE) as *mut sys::lh_container_vtable_t;
+        let vtable_ptr = std::ptr::addr_of!(CONTAINER_VTABLE) as *mut sys::lh_container_vtable_t;
 
         let raw = unsafe {
             sys::lh_document_create_from_string(
@@ -1850,9 +1972,7 @@ impl<'a> Document<'a> {
         let c_css = CString::new(css)?;
         let c_baseurl = baseurl.map(CString::new).transpose()?;
         let c_media = media.map(CString::new).transpose()?;
-        let baseurl_ptr = c_baseurl
-            .as_ref()
-            .map_or(std::ptr::null(), |s| s.as_ptr());
+        let baseurl_ptr = c_baseurl.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
         let media_ptr = c_media.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
         unsafe {
             sys::lh_document_add_stylesheet(self.raw, c_css.as_ptr(), baseurl_ptr, media_ptr);
@@ -1863,6 +1983,26 @@ impl<'a> Document<'a> {
     /// Get the root element of the document.
     pub fn root(&self) -> Option<Element<'_>> {
         let ptr = unsafe { sys::lh_document_root(self.raw) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(Element {
+                ptr,
+                _phantom: PhantomData,
+            })
+        }
+    }
+
+    /// Find the deepest element at document coordinates `(x, y)`.
+    pub fn get_element_by_point(
+        &self,
+        x: f32,
+        y: f32,
+        client_x: f32,
+        client_y: f32,
+    ) -> Option<Element<'_>> {
+        let ptr =
+            unsafe { sys::lh_document_get_element_by_point(self.raw, x, y, client_x, client_y) };
         if ptr.is_null() {
             None
         } else {
@@ -1912,6 +2052,8 @@ impl Drop for Document<'_> {
 // ---------------------------------------------------------------------------
 // Optional pixbuf rendering backend
 // ---------------------------------------------------------------------------
+
+pub mod selection;
 
 #[cfg(feature = "pixbuf")]
 pub mod pixbuf;
@@ -2196,6 +2338,108 @@ mod tests {
         let c_m: sys::lh_font_metrics_t = m.into();
         let back = FontMetrics::from(c_m);
         assert_eq!(m, back);
+    }
+
+    #[test]
+    fn test_element_tree_navigation() {
+        let mut container = TestContainer::new();
+        let mut doc = Document::from_html(
+            "<div><p>Hello</p><p>World</p></div>",
+            &mut container,
+            None,
+            None,
+        )
+        .unwrap();
+        let _ = doc.render(800.0);
+
+        let root = doc.root().expect("document should have a root element");
+        assert!(root.children_count() > 0, "root should have children");
+
+        // Walk the tree: root -> html -> body -> div -> p
+        let text = root.get_text();
+        assert!(
+            text.contains("Hello"),
+            "root text should contain 'Hello', got: {text}"
+        );
+        assert!(
+            text.contains("World"),
+            "root text should contain 'World', got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_element_placement() {
+        let mut container = TestContainer::new();
+        let mut doc = Document::from_html(
+            "<div style='width:100px;height:50px;'>Test</div>",
+            &mut container,
+            None,
+            None,
+        )
+        .unwrap();
+        let _ = doc.render(800.0);
+
+        let root = doc.root().expect("document should have a root");
+        let placement = root.placement();
+        // Root should have some dimensions after render
+        assert!(
+            placement.width > 0.0,
+            "root placement should have positive width"
+        );
+    }
+
+    #[test]
+    fn test_element_is_text() {
+        let mut container = TestContainer::new();
+        let mut doc = Document::from_html("<p>Hello</p>", &mut container, None, None).unwrap();
+        let _ = doc.render(800.0);
+
+        // Walk until we find a text node
+        fn find_text_node(el: &Element<'_>) -> bool {
+            if el.is_text() {
+                return true;
+            }
+            for i in 0..el.children_count() {
+                if let Some(child) = el.child_at(i) {
+                    if find_text_node(&child) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+
+        let root = doc.root().unwrap();
+        assert!(find_text_node(&root), "should find at least one text node");
+    }
+
+    #[test]
+    fn test_element_parent() {
+        let mut container = TestContainer::new();
+        let mut doc =
+            Document::from_html("<div><p>Text</p></div>", &mut container, None, None).unwrap();
+        let _ = doc.render(800.0);
+
+        let root = doc.root().unwrap();
+        // Root should have no parent (or parent is null)
+        // Children should have a parent
+        if root.children_count() > 0 {
+            let child = root.child_at(0).unwrap();
+            let parent = child.parent();
+            assert!(parent.is_some(), "child should have a parent");
+        }
+    }
+
+    #[test]
+    fn test_get_element_by_point() {
+        let mut container = TestContainer::new();
+        let mut doc =
+            Document::from_html("<p>Hello World</p>", &mut container, None, None).unwrap();
+        let _ = doc.render(800.0);
+
+        // Point (10, 10) should hit something in a rendered document
+        let el = doc.get_element_by_point(10.0, 10.0, 10.0, 10.0);
+        assert!(el.is_some(), "should find an element at (10, 10)");
     }
 
     // test_not_send_sync is now a compile_fail doc test on the Document struct.
