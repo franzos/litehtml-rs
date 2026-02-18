@@ -43,11 +43,14 @@ pub struct PixbufContainer {
     fonts: Rc<RefCell<HashMap<usize, FontData>>>,
     next_font_id: usize,
     clip_stack: Vec<(Position, BorderRadiuses)>,
+    cached_clip_mask: Option<tiny_skia::Mask>,
+    clip_mask_dirty: bool,
     images: HashMap<String, tiny_skia::Pixmap>,
     viewport: Position,
     base_url: String,
     caption: String,
     scale_factor: f32,
+    ignore_overflow_clips: bool,
 }
 
 impl PixbufContainer {
@@ -76,6 +79,8 @@ impl PixbufContainer {
             fonts: Rc::new(RefCell::new(HashMap::new())),
             next_font_id: 1,
             clip_stack: Vec::new(),
+            cached_clip_mask: None,
+            clip_mask_dirty: false,
             images: HashMap::new(),
             viewport: Position {
                 x: 0.0,
@@ -86,6 +91,7 @@ impl PixbufContainer {
             base_url: String::new(),
             caption: String::new(),
             scale_factor,
+            ignore_overflow_clips: false,
         }
     }
 
@@ -136,17 +142,18 @@ impl PixbufContainer {
     ///
     /// Call this **after** `doc.draw()` to render the selection on top.
     pub fn draw_selection_rects(&mut self, rects: &[crate::Position]) {
+        self.ensure_clip_mask();
         let highlight = tiny_skia::Color::from_rgba8(100, 150, 255, 80);
         let paint = Paint {
             shader: Shader::SolidColor(highlight),
             anti_alias: false,
             ..Paint::default()
         };
-        let transform = self.scale_transform();
-        let mask = self.build_clip_mask();
+        let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
         for rect in rects {
             if let Some(r) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
-                self.pixmap.fill_rect(r, &paint, transform, mask.as_ref());
+                self.pixmap
+                    .fill_rect(r, &paint, transform, self.cached_clip_mask.as_ref());
             }
         }
     }
@@ -156,9 +163,11 @@ impl PixbufContainer {
         self.scale_factor
     }
 
-    /// Return a `Transform` that scales from logical to physical coordinates.
-    fn scale_transform(&self) -> Transform {
-        Transform::from_scale(self.scale_factor, self.scale_factor)
+    /// When enabled, CSS overflow clips (`set_clip`/`del_clip`) are ignored
+    /// during drawing. This allows a full-document render where no content
+    /// is clipped by `overflow: hidden` or `overflow: auto` containers.
+    pub fn set_ignore_overflow_clips(&mut self, ignore: bool) {
+        self.ignore_overflow_clips = ignore;
     }
 
     /// Resize the pixmap, clearing all existing content.
@@ -175,30 +184,47 @@ impl PixbufContainer {
             tiny_skia::Pixmap::new(phys_w.max(1), phys_h.max(1)).expect("failed to create pixmap");
         self.viewport.width = width as f32;
         self.viewport.height = height as f32;
+        self.cached_clip_mask = None;
+        self.clip_mask_dirty = !self.clip_stack.is_empty();
     }
 
-    /// Build a clip mask from the current clip stack.
-    fn build_clip_mask(&self) -> Option<tiny_skia::Mask> {
+    /// Rebuild the cached clip mask if the clip stack has changed since the
+    /// last build. After this call `self.cached_clip_mask` is up to date and
+    /// can be passed to draw operations via `self.cached_clip_mask.as_ref()`.
+    fn ensure_clip_mask(&mut self) {
+        if !self.clip_mask_dirty {
+            return;
+        }
+        self.clip_mask_dirty = false;
+
         if self.clip_stack.is_empty() {
-            return None;
+            self.cached_clip_mask = None;
+            return;
         }
 
         let w = self.pixmap.width();
         let h = self.pixmap.height();
-        let mut mask = tiny_skia::Mask::new(w, h)?;
+        let Some(mut mask) = tiny_skia::Mask::new(w, h) else {
+            self.cached_clip_mask = None;
+            return;
+        };
 
         // Start fully opaque
-        mask.fill_path(
-            &PathBuilder::from_rect(Rect::from_xywh(0.0, 0.0, w as f32, h as f32)?),
-            FillRule::Winding,
-            true,
-            Transform::identity(),
-        );
+        if let Some(rect) = Rect::from_xywh(0.0, 0.0, w as f32, h as f32) {
+            mask.fill_path(
+                &PathBuilder::from_rect(rect),
+                FillRule::Winding,
+                true,
+                Transform::identity(),
+            );
+        }
 
         // Intersect each clip rect (scale logical positions to physical)
         let s = self.scale_factor;
         for (pos, radii) in &self.clip_stack {
-            let mut clip_mask = tiny_skia::Mask::new(w, h)?;
+            let Some(mut clip_mask) = tiny_skia::Mask::new(w, h) else {
+                continue;
+            };
             let scaled_radii = BorderRadiuses {
                 top_left_x: radii.top_left_x * s,
                 top_left_y: radii.top_left_y * s,
@@ -219,11 +245,10 @@ impl PixbufContainer {
             if let Some(path) = path {
                 clip_mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
             }
-            // Intersect: combine masks by taking minimum
             intersect_masks(&mut mask, &clip_mask);
         }
 
-        Some(mask)
+        self.cached_clip_mask = Some(mask);
     }
 
     /// Create a `Paint` with a solid color.
@@ -534,6 +559,7 @@ impl DocumentContainer for PixbufContainer {
     }
 
     fn draw_text(&mut self, _hdc: usize, text: &str, font: usize, color: Color, pos: Position) {
+        self.ensure_clip_mask();
         let fonts = self.fonts.borrow();
         let Some(font_data) = fonts.get(&font) else {
             return;
@@ -542,7 +568,6 @@ impl DocumentContainer for PixbufContainer {
         let line_height = font_data.metrics.height * self.scale_factor;
         let ct_metrics = Metrics::new(font_data.size, line_height);
         let attrs = attrs_from_font(font_data);
-        let mask = self.build_clip_mask();
 
         let mut fs = self.font_system.borrow_mut();
         let mut buffer = cosmic_text::Buffer::new(&mut fs, ct_metrics);
@@ -593,7 +618,7 @@ impl DocumentContainer for PixbufContainer {
                                                 color.g,
                                                 color.b,
                                                 a as u8,
-                                                mask.as_ref(),
+                                                self.cached_clip_mask.as_ref(),
                                             );
                                         }
                                     }
@@ -623,7 +648,7 @@ impl DocumentContainer for PixbufContainer {
                                                 g,
                                                 b,
                                                 a,
-                                                mask.as_ref(),
+                                                self.cached_clip_mask.as_ref(),
                                             );
                                         }
                                     }
@@ -656,7 +681,7 @@ impl DocumentContainer for PixbufContainer {
                                                 color.g,
                                                 color.b,
                                                 a as u8,
-                                                mask.as_ref(),
+                                                self.cached_clip_mask.as_ref(),
                                             );
                                         }
                                     }
@@ -671,17 +696,27 @@ impl DocumentContainer for PixbufContainer {
     }
 
     fn draw_list_marker(&mut self, _hdc: usize, marker: &ListMarker) {
+        let marker_type = marker.marker_type();
+
+        // Numbered markers delegate to draw_text (which manages its own clip mask)
+        if marker_type > 2 {
+            let idx = marker.index();
+            let text = format!("{}.", idx);
+            let font_id = marker.font();
+            let color = marker.color();
+            let pos = marker.pos();
+            self.draw_text(0, &text, font_id, color, pos);
+            return;
+        }
+
+        self.ensure_clip_mask();
         let pos = marker.pos();
         let color = marker.color();
-        let marker_type = marker.marker_type();
         let paint = Self::solid_paint(color);
-        let transform = self.scale_transform();
-        let mask = self.build_clip_mask();
+        let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
 
-        // Marker types: disc=0, circle=1, square=2, others are numbered
         match marker_type {
             0 => {
-                // Disc: filled circle
                 let cx = pos.x + pos.width / 2.0;
                 let cy = pos.y + pos.height / 2.0;
                 let r = pos.width.min(pos.height) / 2.0;
@@ -691,12 +726,11 @@ impl DocumentContainer for PixbufContainer {
                         &paint,
                         FillRule::Winding,
                         transform,
-                        mask.as_ref(),
+                        self.cached_clip_mask.as_ref(),
                     );
                 }
             }
             1 => {
-                // Circle: stroked circle
                 let cx = pos.x + pos.width / 2.0;
                 let cy = pos.y + pos.height / 2.0;
                 let r = pos.width.min(pos.height) / 2.0;
@@ -706,22 +740,18 @@ impl DocumentContainer for PixbufContainer {
                         ..Stroke::default()
                     };
                     self.pixmap
-                        .stroke_path(&path, &paint, &stroke, transform, mask.as_ref());
+                        .stroke_path(&path, &paint, &stroke, transform, self.cached_clip_mask.as_ref());
                 }
             }
             2 => {
-                // Square: filled rectangle
                 if let Some(rect) = Rect::from_xywh(pos.x, pos.y, pos.width, pos.height) {
                     self.pixmap
-                        .fill_rect(rect, &paint, transform, mask.as_ref());
+                        .fill_rect(rect, &paint, transform, self.cached_clip_mask.as_ref());
                 }
             }
             _ => {
-                // Numbered marker: draw the index as text
-                let idx = marker.index();
-                let text = format!("{}.", idx);
-                let font_id = marker.font();
-                self.draw_text(0, &text, font_id, color, pos);
+                // Unknown marker type; should not reach here given the >2 check above,
+                // but handle gracefully in case litehtml adds new marker types
             }
         }
     }
@@ -742,15 +772,14 @@ impl DocumentContainer for PixbufContainer {
     }
 
     fn draw_image(&mut self, _hdc: usize, layer: &BackgroundLayer, url: &str, _base_url: &str) {
+        self.ensure_clip_mask();
         let Some(img) = self.images.get(url) else {
             return;
         };
         let clip = layer.clip_box();
         let border = layer.border_box();
         let s = self.scale_factor;
-        let mask = self.build_clip_mask();
 
-        // Scale logical positions to physical pixel coords
         let dst_x = (border.x * s) as i32;
         let dst_y = (border.y * s) as i32;
 
@@ -760,12 +789,10 @@ impl DocumentContainer for PixbufContainer {
             quality: tiny_skia::FilterQuality::Bilinear,
         };
 
-        // Use clip_box to limit drawing area via a clip mask (in physical coords)
-        let combined_mask = if clip.width > 0.0 && clip.height > 0.0 {
+        if clip.width > 0.0 && clip.height > 0.0 {
             let w = self.pixmap.width();
             let h = self.pixmap.height();
-            let mut m = tiny_skia::Mask::new(w, h);
-            if let Some(ref mut m) = m {
+            if let Some(mut m) = tiny_skia::Mask::new(w, h) {
                 if let Some(rect) =
                     Rect::from_xywh(clip.x * s, clip.y * s, clip.width * s, clip.height * s)
                 {
@@ -776,24 +803,20 @@ impl DocumentContainer for PixbufContainer {
                         Transform::identity(),
                     );
                 }
-                // Intersect with existing clip mask
-                if let Some(ref existing) = mask {
-                    intersect_masks(m, existing);
+                if let Some(ref existing) = self.cached_clip_mask {
+                    intersect_masks(&mut m, existing);
                 }
+                self.pixmap.draw_pixmap(
+                    dst_x, dst_y, img.as_ref(), &img_paint,
+                    Transform::identity(), Some(&m),
+                );
             }
-            m
         } else {
-            mask
-        };
-
-        self.pixmap.draw_pixmap(
-            dst_x,
-            dst_y,
-            img.as_ref(),
-            &img_paint,
-            Transform::identity(),
-            combined_mask.as_ref(),
-        );
+            self.pixmap.draw_pixmap(
+                dst_x, dst_y, img.as_ref(), &img_paint,
+                Transform::identity(), self.cached_clip_mask.as_ref(),
+            );
+        }
     }
 
     fn draw_solid_fill(&mut self, _hdc: usize, layer: &BackgroundLayer, color: Color) {
@@ -803,14 +826,14 @@ impl DocumentContainer for PixbufContainer {
         let border = layer.border_box();
         let radii = layer.border_radius();
         let paint = Self::solid_paint(color);
-        let transform = self.scale_transform();
-        let mask = self.build_clip_mask();
+        self.ensure_clip_mask();
+        let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
 
         if let Some(path) =
             build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
         {
             self.pixmap
-                .fill_path(&path, &paint, FillRule::Winding, transform, mask.as_ref());
+                .fill_path(&path, &paint, FillRule::Winding, transform, self.cached_clip_mask.as_ref());
         }
     }
 
@@ -820,14 +843,8 @@ impl DocumentContainer for PixbufContainer {
         layer: &BackgroundLayer,
         gradient: &LinearGradient,
     ) {
-        let border = layer.border_box();
-        let radii = layer.border_radius();
-        let start = gradient.start();
-        let end = gradient.end();
         let points = gradient.color_points();
         let stops = color_points_to_stops(&points);
-        let transform = self.scale_transform();
-        let mask = self.build_clip_mask();
 
         if stops.len() < 2 {
             if let Some(cp) = points.first() {
@@ -835,6 +852,13 @@ impl DocumentContainer for PixbufContainer {
             }
             return;
         }
+
+        self.ensure_clip_mask();
+        let border = layer.border_box();
+        let radii = layer.border_radius();
+        let start = gradient.start();
+        let end = gradient.end();
+        let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
 
         let shader = tiny_skia::LinearGradient::new(
             tiny_skia::Point::from_xy(border.x + start.x, border.y + start.y),
@@ -855,7 +879,7 @@ impl DocumentContainer for PixbufContainer {
                 build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
             {
                 self.pixmap
-                    .fill_path(&path, &paint, FillRule::Winding, transform, mask.as_ref());
+                    .fill_path(&path, &paint, FillRule::Winding, transform, self.cached_clip_mask.as_ref());
             }
         }
     }
@@ -866,14 +890,8 @@ impl DocumentContainer for PixbufContainer {
         layer: &BackgroundLayer,
         gradient: &RadialGradient,
     ) {
-        let border = layer.border_box();
-        let radii = layer.border_radius();
-        let center = gradient.position();
-        let radius = gradient.radius();
         let points = gradient.color_points();
         let stops = color_points_to_stops(&points);
-        let transform = self.scale_transform();
-        let mask = self.build_clip_mask();
 
         if stops.len() < 2 {
             if let Some(cp) = points.first() {
@@ -881,6 +899,13 @@ impl DocumentContainer for PixbufContainer {
             }
             return;
         }
+
+        self.ensure_clip_mask();
+        let border = layer.border_box();
+        let radii = layer.border_radius();
+        let center = gradient.position();
+        let radius = gradient.radius();
+        let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
 
         let cx = border.x + center.x;
         let cy = border.y + center.y;
@@ -906,7 +931,7 @@ impl DocumentContainer for PixbufContainer {
                 build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
             {
                 self.pixmap
-                    .fill_path(&path, &paint, FillRule::Winding, transform, mask.as_ref());
+                    .fill_path(&path, &paint, FillRule::Winding, transform, self.cached_clip_mask.as_ref());
             }
         }
     }
@@ -926,8 +951,8 @@ impl DocumentContainer for PixbufContainer {
     }
 
     fn draw_borders(&mut self, _hdc: usize, borders: &Borders, draw_pos: Position, _root: bool) {
-        let transform = self.scale_transform();
-        let mask = self.build_clip_mask();
+        self.ensure_clip_mask();
+        let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
         let x = draw_pos.x;
         let y = draw_pos.y;
         let w = draw_pos.width;
@@ -936,7 +961,7 @@ impl DocumentContainer for PixbufContainer {
         // Draw each border side
         draw_border_side(
             &mut self.pixmap,
-            mask.as_ref(),
+            self.cached_clip_mask.as_ref(),
             &borders.top,
             x,
             y,
@@ -948,7 +973,7 @@ impl DocumentContainer for PixbufContainer {
 
         draw_border_side(
             &mut self.pixmap,
-            mask.as_ref(),
+            self.cached_clip_mask.as_ref(),
             &borders.bottom,
             x,
             y + h - borders.bottom.width,
@@ -960,7 +985,7 @@ impl DocumentContainer for PixbufContainer {
 
         draw_border_side(
             &mut self.pixmap,
-            mask.as_ref(),
+            self.cached_clip_mask.as_ref(),
             &borders.left,
             x,
             y,
@@ -972,7 +997,7 @@ impl DocumentContainer for PixbufContainer {
 
         draw_border_side(
             &mut self.pixmap,
-            mask.as_ref(),
+            self.cached_clip_mask.as_ref(),
             &borders.right,
             x + w - borders.right.width,
             y,
@@ -996,11 +1021,19 @@ impl DocumentContainer for PixbufContainer {
     fn set_cursor(&mut self, _cursor: &str) {}
 
     fn set_clip(&mut self, pos: Position, radius: BorderRadiuses) {
+        if self.ignore_overflow_clips {
+            return;
+        }
         self.clip_stack.push((pos, radius));
+        self.clip_mask_dirty = true;
     }
 
     fn del_clip(&mut self) {
+        if self.ignore_overflow_clips {
+            return;
+        }
         self.clip_stack.pop();
+        self.clip_mask_dirty = true;
     }
 
     fn get_viewport(&self) -> Position {

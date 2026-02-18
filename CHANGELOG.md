@@ -1,7 +1,17 @@
+## [0.2.1] - 2026-02-18
+
+### Added
+- `set_ignore_overflow_clips()` method for full-document rendering without CSS overflow clipping
+
+### Changed
+- Clip mask caching for improved rendering performance
+
+### Fixed
+- Potential panic in `draw_list_marker()` with unknown marker types
+
 ## [0.2.0] - 2026-02-16
 
-## Changed
-
+### Changed
 - Move away from Email focus, to general-purpose HTML
 
 ## [0.1.2] - 2026-02-16
