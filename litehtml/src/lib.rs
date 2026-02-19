@@ -1657,6 +1657,53 @@ static CONTAINER_VTABLE: sys::lh_container_vtable_t = sys::lh_container_vtable_t
 // Document
 // ---------------------------------------------------------------------------
 
+/// Escape CSS meta-characters in an identifier for use in selectors.
+///
+/// Without escaping, `select_one("#foo.bar")` is parsed as "id=foo AND class=bar".
+/// With escaping, `select_one(&format!("#{}", css_escape_ident("foo.bar")))` correctly
+/// matches an element with `id="foo.bar"`.
+pub fn css_escape_ident(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for (i, c) in s.chars().enumerate() {
+        if matches!(
+            c,
+            '.' | ':'
+                | '['
+                | ']'
+                | '('
+                | ')'
+                | '#'
+                | '>'
+                | '+'
+                | '~'
+                | ','
+                | ' '
+                | '{'
+                | '}'
+                | '!'
+                | '"'
+                | '\''
+                | '\\'
+                | '/'
+                | '='
+                | '^'
+                | '$'
+                | '*'
+                | '|'
+                | '%'
+                | '&'
+                | '@'
+        ) {
+            out.push('\\');
+        }
+        if i == 0 && c.is_ascii_digit() {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// Opaque handle to a litehtml element. Borrows from the parent [`Document`].
 pub struct Element<'a> {
     ptr: *mut sys::lh_element_t,
@@ -1708,6 +1755,23 @@ impl<'a> Element<'a> {
     /// Font size from the element's computed CSS.
     pub fn font_size(&self) -> f32 {
         unsafe { sys::lh_element_get_font_size(self.ptr) }
+    }
+
+    /// Find the first descendant matching a CSS selector.
+    ///
+    /// Useful for locating elements by ID (`"#myid"`) or attribute
+    /// (`"[name=anchor]"`). Returns `None` if no match is found.
+    pub fn select_one(&self, selector: &str) -> Option<Element<'a>> {
+        let c_sel = CString::new(selector).ok()?;
+        let ptr = unsafe { sys::lh_element_select_one(self.ptr, c_sel.as_ptr()) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(Element {
+                ptr,
+                _phantom: PhantomData,
+            })
+        }
     }
 
     /// Absolute pixel bounding box after layout.

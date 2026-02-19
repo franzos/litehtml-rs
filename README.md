@@ -102,3 +102,11 @@ let prepared = prepare_email_html(raw_bytes, Some(&cid_resolver), None);
 ```
 
 `EMAIL_MASTER_CSS` provides an email user-agent stylesheet (body reset, responsive images, table normalization, MSO workarounds).
+
+## Tips
+
+A few things worth knowing when integrating `PixbufContainer` into a GUI:
+
+- **Image loading is your job.** During layout, litehtml discovers `<img>` URLs and queues them. Call `take_pending_images()` to drain the queue, fetch the data yourself, then feed it back via `load_image_data()`. Stage multiple images before re-rendering to avoid one rebuild per image.
+- **Pixel data is premultiplied.** `container.pixels()` returns premultiplied RGBA. If your framework expects straight alpha (e.g. iced's `image::Handle::from_rgba`), you'll need to unpremultiply first.
+- **Anchor clicks and cursor state are pull-based.** After mouse events, call `take_anchor_click()` to check if a link was clicked and `cursor()` to read the current CSS cursor value. Discard anchor clicks during active text selections to avoid accidental navigation.

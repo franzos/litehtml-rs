@@ -381,6 +381,10 @@ void lh_element_get_inline_box_at(lh_element_t* el, int index, lh_position_t* po
 typedef void (*lh_inline_box_callback)(const lh_position_t* pos, void* ctx);
 void lh_element_get_inline_boxes(lh_element_t* el, lh_inline_box_callback cb, void* ctx);
 
+/* Find the first descendant matching a CSS selector (e.g. "#id", "[name=foo]").
+   Returns NULL if no match or if el/selector is NULL. */
+lh_element_t* lh_element_select_one(lh_element_t* el, const char* selector);
+
 /* Get the computed text-align value (0=left, 1=right, 2=center, 3=justify). */
 int lh_element_get_text_align(lh_element_t* el);
 

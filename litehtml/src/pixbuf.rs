@@ -46,11 +46,17 @@ pub struct PixbufContainer {
     cached_clip_mask: Option<tiny_skia::Mask>,
     clip_mask_dirty: bool,
     images: HashMap<String, tiny_skia::Pixmap>,
+    pending_images: Vec<(String, bool)>,
+    /// URLs that have already been handed off for fetching. Prevents the same
+    /// URL from being re-added to `pending_images` across document rebuilds.
+    requested_images: std::collections::HashSet<String>,
     viewport: Position,
     base_url: String,
     caption: String,
     scale_factor: f32,
     ignore_overflow_clips: bool,
+    last_anchor_click: Option<String>,
+    current_cursor: String,
 }
 
 impl PixbufContainer {
@@ -82,6 +88,8 @@ impl PixbufContainer {
             cached_clip_mask: None,
             clip_mask_dirty: false,
             images: HashMap::new(),
+            pending_images: Vec::new(),
+            requested_images: std::collections::HashSet::new(),
             viewport: Position {
                 x: 0.0,
                 y: 0.0,
@@ -92,6 +100,8 @@ impl PixbufContainer {
             caption: String::new(),
             scale_factor,
             ignore_overflow_clips: false,
+            last_anchor_click: None,
+            current_cursor: String::new(),
         }
     }
 
@@ -168,6 +178,33 @@ impl PixbufContainer {
     /// is clipped by `overflow: hidden` or `overflow: auto` containers.
     pub fn set_ignore_overflow_clips(&mut self, ignore: bool) {
         self.ignore_overflow_clips = ignore;
+    }
+
+    /// Take the last anchor click URL, if any.
+    ///
+    /// Returns `Some(url)` when `on_anchor_click` was triggered by litehtml
+    /// (via `Document::on_lbutton_up`), clearing the stored value.
+    pub fn take_anchor_click(&mut self) -> Option<String> {
+        self.last_anchor_click.take()
+    }
+
+    /// Drain and return image URLs discovered during layout that haven't been
+    /// loaded yet. The consumer is responsible for fetching the data and calling
+    /// `load_image_data` with the result.
+    pub fn take_pending_images(&mut self) -> Vec<(String, bool)> {
+        std::mem::take(&mut self.pending_images)
+    }
+
+    /// Clear all pending/requested image tracking. Call on navigation so
+    /// the new page's images are discovered fresh.
+    pub fn clear_pending_images(&mut self) {
+        self.pending_images.clear();
+        self.requested_images.clear();
+    }
+
+    /// Get the current CSS cursor value set by litehtml (e.g. `"pointer"`, `"default"`).
+    pub fn cursor(&self) -> &str {
+        &self.current_cursor
     }
 
     /// Resize the pixmap, clearing all existing content.
@@ -739,8 +776,13 @@ impl DocumentContainer for PixbufContainer {
                         width: 1.0,
                         ..Stroke::default()
                     };
-                    self.pixmap
-                        .stroke_path(&path, &paint, &stroke, transform, self.cached_clip_mask.as_ref());
+                    self.pixmap.stroke_path(
+                        &path,
+                        &paint,
+                        &stroke,
+                        transform,
+                        self.cached_clip_mask.as_ref(),
+                    );
                 }
             }
             2 => {
@@ -756,8 +798,12 @@ impl DocumentContainer for PixbufContainer {
         }
     }
 
-    fn load_image(&mut self, _src: &str, _baseurl: &str, _redraw_on_ready: bool) {
-        // Image loading is handled externally via `load_image_data`.
+    fn load_image(&mut self, src: &str, _baseurl: &str, redraw_on_ready: bool) {
+        if src.is_empty() || self.images.contains_key(src) || self.requested_images.contains(src) {
+            return;
+        }
+        self.requested_images.insert(src.to_string());
+        self.pending_images.push((src.to_string(), redraw_on_ready));
     }
 
     fn get_image_size(&self, src: &str, _baseurl: &str) -> Size {
@@ -807,14 +853,22 @@ impl DocumentContainer for PixbufContainer {
                     intersect_masks(&mut m, existing);
                 }
                 self.pixmap.draw_pixmap(
-                    dst_x, dst_y, img.as_ref(), &img_paint,
-                    Transform::identity(), Some(&m),
+                    dst_x,
+                    dst_y,
+                    img.as_ref(),
+                    &img_paint,
+                    Transform::identity(),
+                    Some(&m),
                 );
             }
         } else {
             self.pixmap.draw_pixmap(
-                dst_x, dst_y, img.as_ref(), &img_paint,
-                Transform::identity(), self.cached_clip_mask.as_ref(),
+                dst_x,
+                dst_y,
+                img.as_ref(),
+                &img_paint,
+                Transform::identity(),
+                self.cached_clip_mask.as_ref(),
             );
         }
     }
@@ -832,8 +886,13 @@ impl DocumentContainer for PixbufContainer {
         if let Some(path) =
             build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
         {
-            self.pixmap
-                .fill_path(&path, &paint, FillRule::Winding, transform, self.cached_clip_mask.as_ref());
+            self.pixmap.fill_path(
+                &path,
+                &paint,
+                FillRule::Winding,
+                transform,
+                self.cached_clip_mask.as_ref(),
+            );
         }
     }
 
@@ -878,8 +937,13 @@ impl DocumentContainer for PixbufContainer {
             if let Some(path) =
                 build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
             {
-                self.pixmap
-                    .fill_path(&path, &paint, FillRule::Winding, transform, self.cached_clip_mask.as_ref());
+                self.pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    transform,
+                    self.cached_clip_mask.as_ref(),
+                );
             }
         }
     }
@@ -930,8 +994,13 @@ impl DocumentContainer for PixbufContainer {
             if let Some(path) =
                 build_rounded_rect_path(border.x, border.y, border.width, border.height, &radii)
             {
-                self.pixmap
-                    .fill_path(&path, &paint, FillRule::Winding, transform, self.cached_clip_mask.as_ref());
+                self.pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    transform,
+                    self.cached_clip_mask.as_ref(),
+                );
             }
         }
     }
@@ -1016,9 +1085,13 @@ impl DocumentContainer for PixbufContainer {
         self.base_url = base_url.to_string();
     }
 
-    fn on_anchor_click(&mut self, _url: &str) {}
+    fn on_anchor_click(&mut self, url: &str) {
+        self.last_anchor_click = Some(url.to_string());
+    }
 
-    fn set_cursor(&mut self, _cursor: &str) {}
+    fn set_cursor(&mut self, cursor: &str) {
+        self.current_cursor = cursor.to_string();
+    }
 
     fn set_clip(&mut self, pos: Position, radius: BorderRadiuses) {
         if self.ignore_overflow_clips {
@@ -1100,13 +1173,13 @@ fn blend_pixel(
     }
 
     // Apply clip mask
+    let pixel_offset = y as usize * width as usize + x as usize;
     let effective_a = if let Some(mask) = mask {
-        let mask_idx = (y * width + x) as usize;
         let mask_data = mask.data();
-        if mask_idx >= mask_data.len() {
+        if pixel_offset >= mask_data.len() {
             return;
         }
-        let mask_val = mask_data[mask_idx];
+        let mask_val = mask_data[pixel_offset];
         if mask_val == 0 {
             return;
         }
@@ -1119,7 +1192,7 @@ fn blend_pixel(
         return;
     }
 
-    let idx = ((y * width + x) * 4) as usize;
+    let idx = pixel_offset * 4;
     if idx + 3 >= data.len() {
         return;
     }

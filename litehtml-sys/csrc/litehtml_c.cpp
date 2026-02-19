@@ -1177,6 +1177,15 @@ float lh_element_get_font_size(lh_element_t* el)
     return elem->css().get_font_size();
 }
 
+lh_element_t* lh_element_select_one(lh_element_t* el, const char* selector)
+{
+    if (!el || !selector) return nullptr;
+    auto* elem = reinterpret_cast<litehtml::element*>(el);
+    auto found = elem->select_one(selector);
+    if (!found) return nullptr;
+    return reinterpret_cast<lh_element_t*>(found.get());
+}
+
 void lh_element_get_placement(lh_element_t* el, lh_position_t* pos)
 {
     if (!el || !pos) return;

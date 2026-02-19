@@ -1,3 +1,10 @@
+## [0.2.2] - 2026-02-19
+
+### Added
+- CSS selector queries on elements via `select_one()` and `css_escape_ident()`
+- Pending image tracking: `take_pending_images()` collects URLs discovered during layout
+- Anchor click and cursor state now exposed via `take_anchor_click()` and `cursor()`
+
 ## [0.2.1] - 2026-02-18
 
 ### Added
