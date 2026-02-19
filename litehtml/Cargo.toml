@@ -1,12 +1,12 @@
 [package]
 name = "litehtml"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 license = "MIT"
 authors = ["Franz Geffke <mail@gofranz.com>"]
 description = "Safe Rust bindings for litehtml — a lightweight HTML/CSS rendering engine"
 repository = "https://github.com/franzos/litehtml-rs"
-keywords = ["litehtml", "html", "css", "rendering", "email"]
+keywords = ["litehtml", "html", "css", "rendering", "layout"]
 categories = ["rendering", "web-programming"]
 readme = "README.md"
 exclude = ["tests/", "examples/"]
@@ -29,7 +29,13 @@ base64 = { version = "0.22", optional = true }
 
 [dev-dependencies]
 minifb = "0.28"
+ureq = "3"
+url = "2"
 
 [[example]]
 name = "render"
+required-features = ["pixbuf"]
+
+[[example]]
+name = "browse"
 required-features = ["pixbuf"]

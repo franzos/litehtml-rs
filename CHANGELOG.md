@@ -1,3 +1,12 @@
+## [0.2.3] - 2026-02-19
+
+### Added
+- `browse` example: fetch and render live web pages by URL with scrolling
+- `import_css` now returns an updated base URL for correct resolution of relative references within stylesheets
+
+### Fixed
+- CSS `url()` references in external stylesheets resolved against the wrong base URL
+
 ## [0.2.2] - 2026-02-19
 
 ### Added

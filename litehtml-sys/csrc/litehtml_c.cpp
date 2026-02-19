@@ -436,18 +436,27 @@ public:
 
         litehtml::string result;
         litehtml::string* result_ptr = &result;
+        litehtml::string new_baseurl;
+        litehtml::string* baseurl_ptr = &new_baseurl;
+
+        auto set_string = [](void* ctx, const char* r) {
+            auto* p = static_cast<litehtml::string*>(ctx);
+            *p = r ? r : "";
+        };
 
         vtable->import_css(
             user_data,
             url.c_str(),
             baseurl.c_str(),
-            [](void* ctx, const char* r) {
-                auto* p = static_cast<litehtml::string*>(ctx);
-                *p = r ? r : "";
-            },
-            result_ptr);
+            set_string,
+            result_ptr,
+            set_string,
+            baseurl_ptr);
 
         text = result;
+        if (!new_baseurl.empty()) {
+            baseurl = new_baseurl;
+        }
     }
 
     /* -- set_clip -- */

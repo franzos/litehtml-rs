@@ -1141,9 +1141,15 @@ pub trait DocumentContainer {
         text.to_string()
     }
 
-    /// Import a CSS stylesheet from a URL. Returns the CSS content.
-    fn import_css(&self, url: &str, baseurl: &str) -> String {
-        String::new()
+    /// Import a CSS stylesheet from a URL. Returns the CSS content and
+    /// optionally an updated base URL for resolving relative references
+    /// within the fetched CSS (e.g. `url(...)` and nested `@import`).
+    ///
+    /// If the second element is `Some`, litehtml uses it as the base URL
+    /// for any relative URLs inside the stylesheet. Typically this should
+    /// be the resolved URL of the CSS file itself.
+    fn import_css(&self, url: &str, baseurl: &str) -> (String, Option<String>) {
+        (String::new(), None)
     }
 
     /// Push a clipping rectangle onto the clip stack.
@@ -1542,19 +1548,27 @@ unsafe extern "C" fn cb_import_css(
     url: *const c_char,
     baseurl: *const c_char,
     set_result: sys::lh_set_string_fn,
-    ctx: *mut c_void,
+    result_ctx: *mut c_void,
+    set_baseurl: sys::lh_set_string_fn,
+    baseurl_ctx: *mut c_void,
 ) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
         let url = c_str_to_str(url);
         let baseurl = c_str_to_str(baseurl);
-        let result = bridge.container.import_css(url, baseurl);
+        let (css_text, new_baseurl) = bridge.container.import_css(url, baseurl);
         if let Some(set_fn) = set_result {
-            let c_result = CString::new(result).unwrap_or_else(|_| {
+            let c_result = CString::new(css_text).unwrap_or_else(|_| {
                 warn!("import_css result contained interior null byte, using empty string");
                 CString::default()
             });
-            set_fn(ctx, c_result.as_ptr());
+            set_fn(result_ctx, c_result.as_ptr());
+        }
+        if let Some(new_bu) = new_baseurl {
+            if let Some(set_fn) = set_baseurl {
+                let c_baseurl = CString::new(new_bu).unwrap_or_else(|_| CString::default());
+                set_fn(baseurl_ctx, c_baseurl.as_ptr());
+            }
         }
     }));
 }

@@ -280,7 +280,9 @@ typedef struct lh_container_vtable {
                               const char* url,
                               const char* baseurl,
                               lh_set_string_fn set_result,
-                              void* ctx);
+                              void* result_ctx,
+                              lh_set_string_fn set_baseurl,
+                              void* baseurl_ctx);
 
     void        (*set_clip)(void* user_data,
                             lh_position_t pos,
