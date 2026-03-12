@@ -1,3 +1,24 @@
+## [0.2.4] - 2026-03-12
+
+### Added
+- Exception guards (`try/catch`) on all C++ FFI boundary functions
+- Compile-time layout assertions (`static_assert`) for reinterpret_cast'd C++ types
+- Tests for text selection module
+- macOS support: platform-conditional C++ stdlib linkage (`c++` on macOS, `stdc++` on Linux)
+- Text selection support in `browse` example
+- `FontHandle` and `DrawContext` newtypes replacing bare `usize` in the API
+- Type-safe enums: `FontStyle`, `ListStyleType`, `BackgroundAttachment`, `BackgroundRepeat`, `TextAlign`, `TextDecorationLine`, `TextEmphasisPosition`
+- Default implementations for optional `DocumentContainer` methods (`load_image`, `get_image_size`, `draw_image`, `draw_solid_fill`, `draw_*_gradient`)
+- `Document::with_container_mut()` for safely mutating container state between document operations
+
+### Changed
+- `DocumentContainer` trait: only `create_font`, `delete_font`, `text_width`, `draw_text`, `get_viewport`, and `get_media_features` are required; all other methods now have defaults
+- Pre-generated bindgen output; consumers no longer need `libclang` installed (regenerate with `--features buildtime-bindgen`)
+
+### Fixed
+- Potential UB from C++ exceptions unwinding into Rust across FFI boundary
+- List marker drawing mapped to wrong CSS types (disc/circle/square)
+
 ## [0.2.3] - 2026-02-19
 
 ### Added
