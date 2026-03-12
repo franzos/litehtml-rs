@@ -148,7 +148,12 @@ fn build_vendored(manifest_dir: &Path, out_dir: &Path, csrc_dir: &Path) {
     println!("cargo:rustc-link-lib=static=litehtml_c");
     println!("cargo:rustc-link-lib=static=litehtml");
     println!("cargo:rustc-link-lib=static=gumbo");
-    println!("cargo:rustc-link-lib=stdc++");
+    // Link C++ standard library
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-lib=c++");
+    } else {
+        println!("cargo:rustc-link-lib=stdc++");
+    }
 
     println!("cargo:rerun-if-changed={}", vendor_dir.display());
 }
@@ -193,7 +198,12 @@ fn build_system(out_dir: &Path, csrc_dir: &Path) {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=static=litehtml_c");
     println!("cargo:rustc-link-lib=static=litehtml");
-    println!("cargo:rustc-link-lib=stdc++");
+    // Link C++ standard library
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-lib=c++");
+    } else {
+        println!("cargo:rustc-link-lib=stdc++");
+    }
 }
 
 /// Search include paths for a header file, return the directory containing it

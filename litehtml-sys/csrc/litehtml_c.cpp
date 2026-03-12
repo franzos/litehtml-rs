@@ -10,6 +10,40 @@
 #include <litehtml/render_item.h>
 #include <cstring>
 #include <string>
+#include <type_traits>
+
+/* --------------------------------------------------------------------------
+ * Static assertions for types passed through opaque C pointers via
+ * reinterpret_cast.  If litehtml changes a type's layout in an update,
+ * these will fire at compile time instead of silently producing UB.
+ * -------------------------------------------------------------------------- */
+
+static_assert(std::is_standard_layout<litehtml::font_description>::value,
+    "font_description must be standard layout for safe reinterpret_cast");
+static_assert(sizeof(litehtml::font_description) > 0,
+    "font_description must not be empty");
+
+static_assert(std::is_standard_layout<litehtml::list_marker>::value,
+    "list_marker must be standard layout for safe reinterpret_cast");
+static_assert(sizeof(litehtml::list_marker) > 0,
+    "list_marker must not be empty");
+
+static_assert(std::is_standard_layout<litehtml::background_layer>::value,
+    "background_layer must be standard layout for safe reinterpret_cast");
+static_assert(sizeof(litehtml::background_layer) > 0,
+    "background_layer must not be empty");
+
+// Gradient types inherit from gradient_base (which contains std::vector),
+// so they are not standard layout.  The reinterpret_cast usage is still safe
+// because we only do T* -> void* -> T* pointer roundtrips through the opaque
+// C handle types -- no layout reinterpretation actually occurs.  We assert
+// non-zero size so a litehtml update that empties them will be caught.
+static_assert(sizeof(litehtml::background_layer::linear_gradient) > 0,
+    "linear_gradient must not be empty");
+static_assert(sizeof(litehtml::background_layer::radial_gradient) > 0,
+    "radial_gradient must not be empty");
+static_assert(sizeof(litehtml::background_layer::conic_gradient) > 0,
+    "conic_gradient must not be empty");
 
 /* --------------------------------------------------------------------------
  * Conversion helpers between C structs and litehtml C++ types
@@ -532,93 +566,145 @@ extern "C" {
 
 const char* lh_font_description_family(const lh_font_description_t* fd)
 {
-    if (!fd) return "";
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->family.c_str();
+    try {
+        if (!fd) return "";
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->family.c_str();
+    } catch (...) {
+        return "";
+    }
 }
 
 float lh_font_description_size(const lh_font_description_t* fd)
 {
-    if (!fd) return 0.0f;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->size;
+    try {
+        if (!fd) return 0.0f;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->size;
+    } catch (...) {
+        return 0.0f;
+    }
 }
 
 int lh_font_description_style(const lh_font_description_t* fd)
 {
-    if (!fd) return 0;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return static_cast<int>(d->style);
+    try {
+        if (!fd) return 0;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return static_cast<int>(d->style);
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_font_description_weight(const lh_font_description_t* fd)
 {
-    if (!fd) return 0;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->weight;
+    try {
+        if (!fd) return 0;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->weight;
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_font_description_decoration_line(const lh_font_description_t* fd)
 {
-    if (!fd) return 0;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->decoration_line;
+    try {
+        if (!fd) return 0;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->decoration_line;
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_font_description_decoration_thickness_is_predefined(const lh_font_description_t* fd)
 {
-    if (!fd) return 1;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->decoration_thickness.is_predefined() ? 1 : 0;
+    try {
+        if (!fd) return 1;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->decoration_thickness.is_predefined() ? 1 : 0;
+    } catch (...) {
+        return 1;
+    }
 }
 
 int lh_font_description_decoration_thickness_predef(const lh_font_description_t* fd)
 {
-    if (!fd) return 0;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->decoration_thickness.is_predefined() ? d->decoration_thickness.predef() : 0;
+    try {
+        if (!fd) return 0;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->decoration_thickness.is_predefined() ? d->decoration_thickness.predef() : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_font_description_decoration_thickness_value(const lh_font_description_t* fd)
 {
-    if (!fd) return 0.0f;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->decoration_thickness.is_predefined() ? 0.0f : d->decoration_thickness.val();
+    try {
+        if (!fd) return 0.0f;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->decoration_thickness.is_predefined() ? 0.0f : d->decoration_thickness.val();
+    } catch (...) {
+        return 0.0f;
+    }
 }
 
 int lh_font_description_decoration_style(const lh_font_description_t* fd)
 {
-    if (!fd) return 0;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return static_cast<int>(d->decoration_style);
+    try {
+        if (!fd) return 0;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return static_cast<int>(d->decoration_style);
+    } catch (...) {
+        return 0;
+    }
 }
 
 lh_web_color_t lh_font_description_decoration_color(const lh_font_description_t* fd)
 {
-    if (!fd) return {};
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return to_c(d->decoration_color);
+    try {
+        if (!fd) return {};
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return to_c(d->decoration_color);
+    } catch (...) {
+        return {};
+    }
 }
 
 const char* lh_font_description_emphasis_style(const lh_font_description_t* fd)
 {
-    if (!fd) return "";
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->emphasis_style.c_str();
+    try {
+        if (!fd) return "";
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->emphasis_style.c_str();
+    } catch (...) {
+        return "";
+    }
 }
 
 lh_web_color_t lh_font_description_emphasis_color(const lh_font_description_t* fd)
 {
-    if (!fd) return {};
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return to_c(d->emphasis_color);
+    try {
+        if (!fd) return {};
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return to_c(d->emphasis_color);
+    } catch (...) {
+        return {};
+    }
 }
 
 int lh_font_description_emphasis_position(const lh_font_description_t* fd)
 {
-    if (!fd) return 0;
-    const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
-    return d->emphasis_position;
+    try {
+        if (!fd) return 0;
+        const auto* d = reinterpret_cast<const litehtml::font_description*>(fd);
+        return d->emphasis_position;
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -627,51 +713,79 @@ int lh_font_description_emphasis_position(const lh_font_description_t* fd)
 
 const char* lh_list_marker_image(const lh_list_marker_t* m)
 {
-    if (!m) return "";
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return mk->image.c_str();
+    try {
+        if (!m) return "";
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return mk->image.c_str();
+    } catch (...) {
+        return "";
+    }
 }
 
 const char* lh_list_marker_baseurl(const lh_list_marker_t* m)
 {
-    if (!m) return "";
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return mk->baseurl;
+    try {
+        if (!m) return "";
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return mk->baseurl;
+    } catch (...) {
+        return "";
+    }
 }
 
 int lh_list_marker_type(const lh_list_marker_t* m)
 {
-    if (!m) return 0;
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return static_cast<int>(mk->marker_type);
+    try {
+        if (!m) return 0;
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return static_cast<int>(mk->marker_type);
+    } catch (...) {
+        return 0;
+    }
 }
 
 lh_web_color_t lh_list_marker_color(const lh_list_marker_t* m)
 {
-    if (!m) return {};
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return to_c(mk->color);
+    try {
+        if (!m) return {};
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return to_c(mk->color);
+    } catch (...) {
+        return {};
+    }
 }
 
 lh_position_t lh_list_marker_pos(const lh_list_marker_t* m)
 {
-    if (!m) return {};
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return to_c(mk->pos);
+    try {
+        if (!m) return {};
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return to_c(mk->pos);
+    } catch (...) {
+        return {};
+    }
 }
 
 int lh_list_marker_index(const lh_list_marker_t* m)
 {
-    if (!m) return 0;
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return mk->index;
+    try {
+        if (!m) return 0;
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return mk->index;
+    } catch (...) {
+        return 0;
+    }
 }
 
 uintptr_t lh_list_marker_font(const lh_list_marker_t* m)
 {
-    if (!m) return 0;
-    const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
-    return mk->font;
+    try {
+        if (!m) return 0;
+        const auto* mk = reinterpret_cast<const litehtml::list_marker*>(m);
+        return mk->font;
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -680,51 +794,79 @@ uintptr_t lh_list_marker_font(const lh_list_marker_t* m)
 
 lh_position_t lh_background_layer_border_box(const lh_background_layer_t* layer)
 {
-    if (!layer) return {};
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return to_c(bl->border_box);
+    try {
+        if (!layer) return {};
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return to_c(bl->border_box);
+    } catch (...) {
+        return {};
+    }
 }
 
 lh_border_radiuses_t lh_background_layer_border_radius(const lh_background_layer_t* layer)
 {
-    if (!layer) return {};
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return to_c(bl->border_radius);
+    try {
+        if (!layer) return {};
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return to_c(bl->border_radius);
+    } catch (...) {
+        return {};
+    }
 }
 
 lh_position_t lh_background_layer_clip_box(const lh_background_layer_t* layer)
 {
-    if (!layer) return {};
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return to_c(bl->clip_box);
+    try {
+        if (!layer) return {};
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return to_c(bl->clip_box);
+    } catch (...) {
+        return {};
+    }
 }
 
 lh_position_t lh_background_layer_origin_box(const lh_background_layer_t* layer)
 {
-    if (!layer) return {};
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return to_c(bl->origin_box);
+    try {
+        if (!layer) return {};
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return to_c(bl->origin_box);
+    } catch (...) {
+        return {};
+    }
 }
 
 int lh_background_layer_attachment(const lh_background_layer_t* layer)
 {
-    if (!layer) return 0;
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return static_cast<int>(bl->attachment);
+    try {
+        if (!layer) return 0;
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return static_cast<int>(bl->attachment);
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_background_layer_repeat(const lh_background_layer_t* layer)
 {
-    if (!layer) return 0;
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return static_cast<int>(bl->repeat);
+    try {
+        if (!layer) return 0;
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return static_cast<int>(bl->repeat);
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_background_layer_is_root(const lh_background_layer_t* layer)
 {
-    if (!layer) return 0;
-    const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
-    return bl->is_root ? 1 : 0;
+    try {
+        if (!layer) return 0;
+        const auto* bl = reinterpret_cast<const litehtml::background_layer*>(layer);
+        return bl->is_root ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -733,67 +875,95 @@ int lh_background_layer_is_root(const lh_background_layer_t* layer)
 
 lh_point_t lh_linear_gradient_start(const lh_linear_gradient_t* g)
 {
-    if (!g) return {};
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    return to_c(lg->start);
+    try {
+        if (!g) return {};
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        return to_c(lg->start);
+    } catch (...) {
+        return {};
+    }
 }
 
 lh_point_t lh_linear_gradient_end(const lh_linear_gradient_t* g)
 {
-    if (!g) return {};
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    return to_c(lg->end);
+    try {
+        if (!g) return {};
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        return to_c(lg->end);
+    } catch (...) {
+        return {};
+    }
 }
 
 int lh_linear_gradient_color_points_count(const lh_linear_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    return static_cast<int>(lg->color_points.size());
+    try {
+        if (!g) return 0;
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        return static_cast<int>(lg->color_points.size());
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_linear_gradient_color_point_offset(const lh_linear_gradient_t* g,
                                              int idx)
 {
-    if (!g) return 0.0f;
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    if (idx < 0 || idx >= static_cast<int>(lg->color_points.size()))
+    try {
+        if (!g) return 0.0f;
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        if (idx < 0 || idx >= static_cast<int>(lg->color_points.size()))
+            return 0.0f;
+        return lg->color_points[idx].offset;
+    } catch (...) {
         return 0.0f;
-    return lg->color_points[idx].offset;
+    }
 }
 
 lh_web_color_t lh_linear_gradient_color_point_color(
     const lh_linear_gradient_t* g, int idx)
 {
-    if (!g) return {};
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    if (idx < 0 || idx >= static_cast<int>(lg->color_points.size()))
-    {
-        lh_web_color_t zero = {};
-        return zero;
+    try {
+        if (!g) return {};
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        if (idx < 0 || idx >= static_cast<int>(lg->color_points.size()))
+        {
+            lh_web_color_t zero = {};
+            return zero;
+        }
+        return to_c(lg->color_points[idx].color);
+    } catch (...) {
+        return {};
     }
-    return to_c(lg->color_points[idx].color);
 }
 
 int lh_linear_gradient_color_space(const lh_linear_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    return static_cast<int>(lg->color_space);
+    try {
+        if (!g) return 0;
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        return static_cast<int>(lg->color_space);
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_linear_gradient_hue_interpolation(const lh_linear_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* lg = reinterpret_cast<
-        const litehtml::background_layer::linear_gradient*>(g);
-    return static_cast<int>(lg->hue_interpolation);
+    try {
+        if (!g) return 0;
+        const auto* lg = reinterpret_cast<
+            const litehtml::background_layer::linear_gradient*>(g);
+        return static_cast<int>(lg->hue_interpolation);
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -802,67 +972,95 @@ int lh_linear_gradient_hue_interpolation(const lh_linear_gradient_t* g)
 
 lh_point_t lh_radial_gradient_position(const lh_radial_gradient_t* g)
 {
-    if (!g) return {};
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    return to_c(rg->position);
+    try {
+        if (!g) return {};
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        return to_c(rg->position);
+    } catch (...) {
+        return {};
+    }
 }
 
 lh_point_t lh_radial_gradient_radius(const lh_radial_gradient_t* g)
 {
-    if (!g) return {};
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    return to_c(rg->radius);
+    try {
+        if (!g) return {};
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        return to_c(rg->radius);
+    } catch (...) {
+        return {};
+    }
 }
 
 int lh_radial_gradient_color_points_count(const lh_radial_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    return static_cast<int>(rg->color_points.size());
+    try {
+        if (!g) return 0;
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        return static_cast<int>(rg->color_points.size());
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_radial_gradient_color_point_offset(const lh_radial_gradient_t* g,
                                              int idx)
 {
-    if (!g) return 0.0f;
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    if (idx < 0 || idx >= static_cast<int>(rg->color_points.size()))
+    try {
+        if (!g) return 0.0f;
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        if (idx < 0 || idx >= static_cast<int>(rg->color_points.size()))
+            return 0.0f;
+        return rg->color_points[idx].offset;
+    } catch (...) {
         return 0.0f;
-    return rg->color_points[idx].offset;
+    }
 }
 
 lh_web_color_t lh_radial_gradient_color_point_color(
     const lh_radial_gradient_t* g, int idx)
 {
-    if (!g) return {};
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    if (idx < 0 || idx >= static_cast<int>(rg->color_points.size()))
-    {
-        lh_web_color_t zero = {};
-        return zero;
+    try {
+        if (!g) return {};
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        if (idx < 0 || idx >= static_cast<int>(rg->color_points.size()))
+        {
+            lh_web_color_t zero = {};
+            return zero;
+        }
+        return to_c(rg->color_points[idx].color);
+    } catch (...) {
+        return {};
     }
-    return to_c(rg->color_points[idx].color);
 }
 
 int lh_radial_gradient_color_space(const lh_radial_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    return static_cast<int>(rg->color_space);
+    try {
+        if (!g) return 0;
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        return static_cast<int>(rg->color_space);
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_radial_gradient_hue_interpolation(const lh_radial_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* rg = reinterpret_cast<
-        const litehtml::background_layer::radial_gradient*>(g);
-    return static_cast<int>(rg->hue_interpolation);
+    try {
+        if (!g) return 0;
+        const auto* rg = reinterpret_cast<
+            const litehtml::background_layer::radial_gradient*>(g);
+        return static_cast<int>(rg->hue_interpolation);
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -871,75 +1069,107 @@ int lh_radial_gradient_hue_interpolation(const lh_radial_gradient_t* g)
 
 lh_point_t lh_conic_gradient_position(const lh_conic_gradient_t* g)
 {
-    if (!g) return {};
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    return to_c(cg->position);
+    try {
+        if (!g) return {};
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        return to_c(cg->position);
+    } catch (...) {
+        return {};
+    }
 }
 
 float lh_conic_gradient_angle(const lh_conic_gradient_t* g)
 {
-    if (!g) return 0.0f;
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    return cg->angle;
+    try {
+        if (!g) return 0.0f;
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        return cg->angle;
+    } catch (...) {
+        return 0.0f;
+    }
 }
 
 float lh_conic_gradient_radius(const lh_conic_gradient_t* g)
 {
-    if (!g) return 0.0f;
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    return cg->radius;
+    try {
+        if (!g) return 0.0f;
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        return cg->radius;
+    } catch (...) {
+        return 0.0f;
+    }
 }
 
 int lh_conic_gradient_color_points_count(const lh_conic_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    return static_cast<int>(cg->color_points.size());
+    try {
+        if (!g) return 0;
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        return static_cast<int>(cg->color_points.size());
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_conic_gradient_color_point_offset(const lh_conic_gradient_t* g,
                                             int idx)
 {
-    if (!g) return 0.0f;
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    if (idx < 0 || idx >= static_cast<int>(cg->color_points.size()))
+    try {
+        if (!g) return 0.0f;
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        if (idx < 0 || idx >= static_cast<int>(cg->color_points.size()))
+            return 0.0f;
+        return cg->color_points[idx].offset;
+    } catch (...) {
         return 0.0f;
-    return cg->color_points[idx].offset;
+    }
 }
 
 lh_web_color_t lh_conic_gradient_color_point_color(
     const lh_conic_gradient_t* g, int idx)
 {
-    if (!g) return {};
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    if (idx < 0 || idx >= static_cast<int>(cg->color_points.size()))
-    {
-        lh_web_color_t zero = {};
-        return zero;
+    try {
+        if (!g) return {};
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        if (idx < 0 || idx >= static_cast<int>(cg->color_points.size()))
+        {
+            lh_web_color_t zero = {};
+            return zero;
+        }
+        return to_c(cg->color_points[idx].color);
+    } catch (...) {
+        return {};
     }
-    return to_c(cg->color_points[idx].color);
 }
 
 int lh_conic_gradient_color_space(const lh_conic_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    return static_cast<int>(cg->color_space);
+    try {
+        if (!g) return 0;
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        return static_cast<int>(cg->color_space);
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_conic_gradient_hue_interpolation(const lh_conic_gradient_t* g)
 {
-    if (!g) return 0;
-    const auto* cg = reinterpret_cast<
-        const litehtml::background_layer::conic_gradient*>(g);
-    return static_cast<int>(cg->hue_interpolation);
+    try {
+        if (!g) return 0;
+        const auto* cg = reinterpret_cast<
+            const litehtml::background_layer::conic_gradient*>(g);
+        return static_cast<int>(cg->hue_interpolation);
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -953,44 +1183,55 @@ lh_document_t* lh_document_create_from_string(
     const char* master_css,
     const char* user_styles)
 {
-    if (!html || !vtable) return nullptr;
+    try {
+        if (!html || !vtable) return nullptr;
 
-    auto* container = new CDocumentContainer(vtable, user_data);
+        auto* container = new CDocumentContainer(vtable, user_data);
 
-    std::string master = master_css ? master_css : litehtml::master_css;
-    std::string user   = user_styles ? user_styles : "";
+        std::string master = master_css ? master_css : litehtml::master_css;
+        std::string user   = user_styles ? user_styles : "";
 
-    litehtml::document::ptr doc =
-        litehtml::document::createFromString(html, container, master, user);
+        litehtml::document::ptr doc =
+            litehtml::document::createFromString(html, container, master, user);
 
-    if (!doc) {
-        delete container;
+        if (!doc) {
+            delete container;
+            return nullptr;
+        }
+
+        auto* internal    = new lh_document_internal;
+        internal->doc       = doc;
+        internal->container = container;
+
+        return reinterpret_cast<lh_document_t*>(internal);
+    } catch (...) {
         return nullptr;
     }
-
-    auto* internal    = new lh_document_internal;
-    internal->doc       = doc;
-    internal->container = container;
-
-    return reinterpret_cast<lh_document_t*>(internal);
 }
 
 void lh_document_destroy(lh_document_t* doc)
 {
-    if (!doc) return;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    /* Drop the document (shared_ptr) first -- its destructor calls back into
-       the container (e.g. delete_font), so the container must still be alive. */
-    auto* container = internal->container;
-    delete internal;
-    delete container;
+    try {
+        if (!doc) return;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        /* Drop the document (shared_ptr) first -- its destructor calls back into
+           the container (e.g. delete_font), so the container must still be alive. */
+        auto* container = internal->container;
+        delete internal;
+        delete container;
+    } catch (...) {
+    }
 }
 
 float lh_document_render(lh_document_t* doc, float max_width)
 {
-    if (!doc) return 0;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    return internal->doc->render(max_width);
+    try {
+        if (!doc) return 0;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        return internal->doc->render(max_width);
+    } catch (...) {
+        return 0;
+    }
 }
 
 void lh_document_draw(lh_document_t* doc,
@@ -998,31 +1239,42 @@ void lh_document_draw(lh_document_t* doc,
                        float x, float y,
                        const lh_position_t* clip)
 {
-    if (!doc) return;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+    try {
+        if (!doc) return;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
 
-    if (clip) {
-        litehtml::position cpp_clip = to_cpp(*clip);
-        internal->doc->draw(hdc, x, y, &cpp_clip);
-    } else {
-        internal->doc->draw(hdc, x, y, nullptr);
+        if (clip) {
+            litehtml::position cpp_clip = to_cpp(*clip);
+            internal->doc->draw(hdc, x, y, &cpp_clip);
+        } else {
+            internal->doc->draw(hdc, x, y, nullptr);
+        }
+    } catch (...) {
     }
 }
 
 float lh_document_width(const lh_document_t* doc)
 {
-    if (!doc) return 0;
-    const auto* internal =
-        reinterpret_cast<const lh_document_internal*>(doc);
-    return internal->doc->width();
+    try {
+        if (!doc) return 0;
+        const auto* internal =
+            reinterpret_cast<const lh_document_internal*>(doc);
+        return internal->doc->width();
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_document_height(const lh_document_t* doc)
 {
-    if (!doc) return 0;
-    const auto* internal =
-        reinterpret_cast<const lh_document_internal*>(doc);
-    return internal->doc->height();
+    try {
+        if (!doc) return 0;
+        const auto* internal =
+            reinterpret_cast<const lh_document_internal*>(doc);
+        return internal->doc->height();
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -1034,36 +1286,43 @@ void lh_document_add_stylesheet(lh_document_t* doc,
                                 const char* baseurl,
                                 const char* media)
 {
-    if (!doc || !css_text || !css_text[0]) return;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+    try {
+        if (!doc || !css_text || !css_text[0]) return;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
 
-    litehtml::css stylesheet;
-    litehtml::media_query_list_list::ptr mq;
-    if (media && media[0]) {
-        auto mq_list = litehtml::parse_media_query_list(media, internal->doc);
-        mq = std::make_shared<litehtml::media_query_list_list>();
-        mq->add(mq_list);
-    }
-    stylesheet.parse_css_stylesheet(
-        css_text,
-        baseurl ? baseurl : "",
-        internal->doc,
-        mq);
-    stylesheet.sort_selectors();
+        litehtml::css stylesheet;
+        litehtml::media_query_list_list::ptr mq;
+        if (media && media[0]) {
+            auto mq_list = litehtml::parse_media_query_list(media, internal->doc);
+            mq = std::make_shared<litehtml::media_query_list_list>();
+            mq->add(mq_list);
+        }
+        stylesheet.parse_css_stylesheet(
+            css_text,
+            baseurl ? baseurl : "",
+            internal->doc,
+            mq);
+        stylesheet.sort_selectors();
 
-    auto root = internal->doc->root();
-    if (root) {
-        root->apply_stylesheet(stylesheet);
-        root->compute_styles();
+        auto root = internal->doc->root();
+        if (root) {
+            root->apply_stylesheet(stylesheet);
+            root->compute_styles();
+        }
+    } catch (...) {
     }
 }
 
 lh_element_t* lh_document_root(lh_document_t* doc)
 {
-    if (!doc) return nullptr;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    auto root = internal->doc->root();
-    return reinterpret_cast<lh_element_t*>(root.get());
+    try {
+        if (!doc) return nullptr;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        auto root = internal->doc->root();
+        return reinterpret_cast<lh_element_t*>(root.get());
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void lh_document_append_children_from_string(lh_document_t* doc,
@@ -1071,10 +1330,13 @@ void lh_document_append_children_from_string(lh_document_t* doc,
                                               const char* html,
                                               int replace_existing)
 {
-    if (!doc || !parent || !html) return;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    auto* elem = reinterpret_cast<litehtml::element*>(parent);
-    internal->doc->append_children_from_string(*elem, html, replace_existing != 0);
+    try {
+        if (!doc || !parent || !html) return;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        auto* elem = reinterpret_cast<litehtml::element*>(parent);
+        internal->doc->append_children_from_string(*elem, html, replace_existing != 0);
+    } catch (...) {
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -1085,52 +1347,72 @@ int lh_document_on_mouse_over(lh_document_t* doc,
                                float x, float y,
                                float client_x, float client_y)
 {
-    if (!doc) return 0;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    litehtml::position::vector redraw_boxes;
-    bool changed = internal->doc->on_mouse_over(x, y, client_x, client_y,
-                                                 redraw_boxes);
-    return changed ? 1 : 0;
+    try {
+        if (!doc) return 0;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        litehtml::position::vector redraw_boxes;
+        bool changed = internal->doc->on_mouse_over(x, y, client_x, client_y,
+                                                     redraw_boxes);
+        return changed ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_document_on_lbutton_down(lh_document_t* doc,
                                  float x, float y,
                                  float client_x, float client_y)
 {
-    if (!doc) return 0;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    litehtml::position::vector redraw_boxes;
-    bool changed = internal->doc->on_lbutton_down(x, y, client_x, client_y,
-                                                   redraw_boxes);
-    return changed ? 1 : 0;
+    try {
+        if (!doc) return 0;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        litehtml::position::vector redraw_boxes;
+        bool changed = internal->doc->on_lbutton_down(x, y, client_x, client_y,
+                                                       redraw_boxes);
+        return changed ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_document_on_lbutton_up(lh_document_t* doc,
                                float x, float y,
                                float client_x, float client_y)
 {
-    if (!doc) return 0;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    litehtml::position::vector redraw_boxes;
-    bool changed = internal->doc->on_lbutton_up(x, y, client_x, client_y,
-                                                 redraw_boxes);
-    return changed ? 1 : 0;
+    try {
+        if (!doc) return 0;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        litehtml::position::vector redraw_boxes;
+        bool changed = internal->doc->on_lbutton_up(x, y, client_x, client_y,
+                                                     redraw_boxes);
+        return changed ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_document_on_mouse_leave(lh_document_t* doc)
 {
-    if (!doc) return 0;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    litehtml::position::vector redraw_boxes;
-    bool changed = internal->doc->on_mouse_leave(redraw_boxes);
-    return changed ? 1 : 0;
+    try {
+        if (!doc) return 0;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        litehtml::position::vector redraw_boxes;
+        bool changed = internal->doc->on_mouse_leave(redraw_boxes);
+        return changed ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 int lh_document_media_changed(lh_document_t* doc)
 {
-    if (!doc) return 0;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    return internal->doc->media_changed() ? 1 : 0;
+    try {
+        if (!doc) return 0;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        return internal->doc->media_changed() ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -1139,93 +1421,131 @@ int lh_document_media_changed(lh_document_t* doc)
 
 lh_element_t* lh_element_parent(lh_element_t* el)
 {
-    if (!el) return nullptr;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    auto parent = elem->parent();
-    if (!parent) return nullptr;
-    return reinterpret_cast<lh_element_t*>(parent.get());
+    try {
+        if (!el) return nullptr;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        auto parent = elem->parent();
+        if (!parent) return nullptr;
+        return reinterpret_cast<lh_element_t*>(parent.get());
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 int lh_element_children_count(lh_element_t* el)
 {
-    if (!el) return 0;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    return static_cast<int>(elem->children().size());
+    try {
+        if (!el) return 0;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        return static_cast<int>(elem->children().size());
+    } catch (...) {
+        return 0;
+    }
 }
 
 lh_element_t* lh_element_child_at(lh_element_t* el, int index)
 {
-    if (!el) return nullptr;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    const auto& kids = elem->children();
-    if (index < 0 || index >= static_cast<int>(kids.size()))
+    try {
+        if (!el) return nullptr;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        const auto& kids = elem->children();
+        if (index < 0 || index >= static_cast<int>(kids.size()))
+            return nullptr;
+        auto it = kids.begin();
+        std::advance(it, index);
+        return reinterpret_cast<lh_element_t*>(it->get());
+    } catch (...) {
         return nullptr;
-    auto it = kids.begin();
-    std::advance(it, index);
-    return reinterpret_cast<lh_element_t*>(it->get());
+    }
 }
 
 int lh_element_is_text(lh_element_t* el)
 {
-    if (!el) return 0;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    return elem->is_text() ? 1 : 0;
+    try {
+        if (!el) return 0;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        return elem->is_text() ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 
 uintptr_t lh_element_get_font(lh_element_t* el)
 {
-    if (!el) return 0;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    return elem->css().get_font();
+    try {
+        if (!el) return 0;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        return elem->css().get_font();
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_element_get_font_size(lh_element_t* el)
 {
-    if (!el) return 0.0f;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    return elem->css().get_font_size();
+    try {
+        if (!el) return 0.0f;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        return elem->css().get_font_size();
+    } catch (...) {
+        return 0.0f;
+    }
 }
 
 lh_element_t* lh_element_select_one(lh_element_t* el, const char* selector)
 {
-    if (!el || !selector) return nullptr;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    auto found = elem->select_one(selector);
-    if (!found) return nullptr;
-    return reinterpret_cast<lh_element_t*>(found.get());
+    try {
+        if (!el || !selector) return nullptr;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        auto found = elem->select_one(selector);
+        if (!found) return nullptr;
+        return reinterpret_cast<lh_element_t*>(found.get());
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void lh_element_get_placement(lh_element_t* el, lh_position_t* pos)
 {
-    if (!el || !pos) return;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    litehtml::position p = elem->get_placement();
-    *pos = to_c(p);
+    try {
+        if (!el || !pos) return;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        litehtml::position p = elem->get_placement();
+        *pos = to_c(p);
+    } catch (...) {
+    }
 }
 
 void lh_element_get_text(lh_element_t* el,
                          void (*cb)(void* ctx, const char* text),
                          void* ctx)
 {
-    if (!el || !cb) return;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    litehtml::string text;
-    elem->get_text(text);
-    cb(ctx, text.c_str());
+    try {
+        if (!el || !cb) return;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        litehtml::string text;
+        elem->get_text(text);
+        cb(ctx, text.c_str());
+    } catch (...) {
+    }
 }
 
 lh_element_t* lh_document_get_element_by_point(lh_document_t* doc,
                                                 float x, float y,
                                                 float client_x, float client_y)
 {
-    if (!doc) return nullptr;
-    auto* internal = reinterpret_cast<lh_document_internal*>(doc);
-    auto root_render = internal->doc->root_render();
-    if (!root_render) return nullptr;
-    auto el = root_render->get_element_by_point(x, y, client_x, client_y,
-        [](const std::shared_ptr<litehtml::render_item>&) { return true; });
-    if (!el) return nullptr;
-    return reinterpret_cast<lh_element_t*>(el.get());
+    try {
+        if (!doc) return nullptr;
+        auto* internal = reinterpret_cast<lh_document_internal*>(doc);
+        auto root_render = internal->doc->root_render();
+        if (!root_render) return nullptr;
+        auto el = root_render->get_element_by_point(x, y, client_x, client_y,
+            [](const std::shared_ptr<litehtml::render_item>&) { return true; });
+        if (!el) return nullptr;
+        return reinterpret_cast<lh_element_t*>(el.get());
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -1248,72 +1568,90 @@ static void compute_ri_offset(const std::shared_ptr<litehtml::render_item>& ri,
 
 int lh_element_get_inline_boxes_count(lh_element_t* el)
 {
-    if (!el) return 0;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    auto ri = elem->get_render_item();
-    if (!ri) return 0;
-    litehtml::position::vector boxes;
-    ri->get_inline_boxes(boxes);
-    return static_cast<int>(boxes.size());
+    try {
+        if (!el) return 0;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        auto ri = elem->get_render_item();
+        if (!ri) return 0;
+        litehtml::position::vector boxes;
+        ri->get_inline_boxes(boxes);
+        return static_cast<int>(boxes.size());
+    } catch (...) {
+        return 0;
+    }
 }
 
 void lh_element_get_inline_box_at(lh_element_t* el, int index, lh_position_t* pos)
 {
-    if (!el || !pos) return;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    auto ri = elem->get_render_item();
-    if (!ri) return;
+    try {
+        if (!el || !pos) return;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        auto ri = elem->get_render_item();
+        if (!ri) return;
 
-    litehtml::position::vector boxes;
-    ri->get_inline_boxes(boxes);
-    if (index < 0 || index >= static_cast<int>(boxes.size()))
-        return;
+        litehtml::position::vector boxes;
+        ri->get_inline_boxes(boxes);
+        if (index < 0 || index >= static_cast<int>(boxes.size()))
+            return;
 
-    float ox, oy;
-    compute_ri_offset(ri, ox, oy);
+        float ox, oy;
+        compute_ri_offset(ri, ox, oy);
 
-    litehtml::position box = boxes[index];
-    box.x += ox;
-    box.y += oy;
-    *pos = to_c(box);
+        litehtml::position box = boxes[index];
+        box.x += ox;
+        box.y += oy;
+        *pos = to_c(box);
+    } catch (...) {
+    }
 }
 
 void lh_element_get_inline_boxes(lh_element_t* el, lh_inline_box_callback cb, void* ctx)
 {
-    if (!el || !cb) return;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    auto ri = elem->get_render_item();
-    if (!ri) return;
+    try {
+        if (!el || !cb) return;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        auto ri = elem->get_render_item();
+        if (!ri) return;
 
-    litehtml::position::vector boxes;
-    ri->get_inline_boxes(boxes);
-    if (boxes.empty()) return;
+        litehtml::position::vector boxes;
+        ri->get_inline_boxes(boxes);
+        if (boxes.empty()) return;
 
-    float ox, oy;
-    compute_ri_offset(ri, ox, oy);
+        float ox, oy;
+        compute_ri_offset(ri, ox, oy);
 
-    for (const auto& box_ : boxes)
-    {
-        litehtml::position abs = box_;
-        abs.x += ox;
-        abs.y += oy;
-        lh_position_t pos = to_c(abs);
-        cb(&pos, ctx);
+        for (const auto& box_ : boxes)
+        {
+            litehtml::position abs = box_;
+            abs.x += ox;
+            abs.y += oy;
+            lh_position_t pos = to_c(abs);
+            cb(&pos, ctx);
+        }
+    } catch (...) {
     }
 }
 
 int lh_element_get_text_align(lh_element_t* el)
 {
-    if (!el) return 0;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    return static_cast<int>(elem->css().get_text_align());
+    try {
+        if (!el) return 0;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        return static_cast<int>(elem->css().get_text_align());
+    } catch (...) {
+        return 0;
+    }
 }
 
 float lh_element_get_line_height(lh_element_t* el)
 {
-    if (!el) return 0.0f;
-    auto* elem = reinterpret_cast<litehtml::element*>(el);
-    return elem->css().line_height().computed_value;
+    try {
+        if (!el) return 0.0f;
+        auto* elem = reinterpret_cast<litehtml::element*>(el);
+        return elem->css().line_height().computed_value;
+    } catch (...) {
+        return 0.0f;
+    }
 }
 
 } /* extern "C" */
