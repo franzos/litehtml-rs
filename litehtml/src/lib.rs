@@ -1247,7 +1247,14 @@ pub trait DocumentContainer {
     fn text_width(&self, text: &str, font: FontHandle) -> f32;
 
     /// Draw `text` at `pos` using `font` and `color`.
-    fn draw_text(&mut self, hdc: DrawContext, text: &str, font: FontHandle, color: Color, pos: Position);
+    fn draw_text(
+        &mut self,
+        hdc: DrawContext,
+        text: &str,
+        font: FontHandle,
+        color: Color,
+        pos: Position,
+    );
 
     /// Convert typographic points to device pixels.
     fn pt_to_px(&self, pt: f32) -> f32 {
@@ -1276,7 +1283,8 @@ pub trait DocumentContainer {
     }
 
     /// Draw a background image layer.
-    fn draw_image(&mut self, hdc: DrawContext, layer: &BackgroundLayer, url: &str, base_url: &str) {}
+    fn draw_image(&mut self, hdc: DrawContext, layer: &BackgroundLayer, url: &str, base_url: &str) {
+    }
 
     /// Draw a solid color background layer.
     fn draw_solid_fill(&mut self, hdc: DrawContext, layer: &BackgroundLayer, color: Color) {}
@@ -1309,7 +1317,14 @@ pub trait DocumentContainer {
     }
 
     /// Draw element borders.
-    fn draw_borders(&mut self, hdc: DrawContext, borders: &Borders, draw_pos: Position, root: bool) {}
+    fn draw_borders(
+        &mut self,
+        hdc: DrawContext,
+        borders: &Borders,
+        draw_pos: Position,
+        root: bool,
+    ) {
+    }
 
     /// Set the document title.
     fn set_caption(&mut self, caption: &str) {}
@@ -1499,9 +1514,13 @@ unsafe extern "C" fn cb_draw_text(
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
         let text = c_str_to_str(text);
-        bridge
-            .container
-            .draw_text(DrawContext(hdc), text, FontHandle(h_font), Color::from(color), Position::from(pos));
+        bridge.container.draw_text(
+            DrawContext(hdc),
+            text,
+            FontHandle(h_font),
+            Color::from(color),
+            Position::from(pos),
+        );
     }));
 }
 
@@ -1586,7 +1605,9 @@ unsafe extern "C" fn cb_draw_image(
         let layer = BackgroundLayer::from_ptr(layer);
         let url = c_str_to_str(url);
         let base_url = c_str_to_str(base_url);
-        bridge.container.draw_image(DrawContext(hdc), &layer, url, base_url);
+        bridge
+            .container
+            .draw_image(DrawContext(hdc), &layer, url, base_url);
     }));
 }
 
@@ -1647,7 +1668,9 @@ unsafe extern "C" fn cb_draw_conic_gradient(
         let bridge = bridge_from_user_data(user_data);
         let layer = BackgroundLayer::from_ptr(layer);
         let gradient = ConicGradient::from_ptr(gradient);
-        bridge.container.draw_conic_gradient(DrawContext(hdc), &layer, &gradient);
+        bridge
+            .container
+            .draw_conic_gradient(DrawContext(hdc), &layer, &gradient);
     }));
 }
 
@@ -1661,9 +1684,12 @@ unsafe extern "C" fn cb_draw_borders(
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
         let borders = Borders::from(borders);
-        bridge
-            .container
-            .draw_borders(DrawContext(hdc), &borders, Position::from(draw_pos), root != 0);
+        bridge.container.draw_borders(
+            DrawContext(hdc),
+            &borders,
+            Position::from(draw_pos),
+            root != 0,
+        );
     }));
 }
 

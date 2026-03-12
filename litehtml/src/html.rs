@@ -7,6 +7,9 @@
 use base64::Engine;
 use encoding_rs::Encoding;
 
+/// Callback type for resolving a URI string to raw bytes.
+pub type ByteResolver<'a> = Option<&'a dyn Fn(&str) -> Option<Vec<u8>>>;
+
 // ---------------------------------------------------------------------------
 // Encoding detection & conversion
 // ---------------------------------------------------------------------------
@@ -73,12 +76,10 @@ fn detect_meta_charset(html: &str) -> Option<&'static Encoding> {
         let rest = rest.strip_prefix('=')?;
         let rest = rest.trim_start();
         // Strip optional quotes
-        let (encoding_name, _) = if rest.starts_with('"') {
-            let inner = &rest[1..];
+        let (encoding_name, _) = if let Some(inner) = rest.strip_prefix('"') {
             let end = inner.find('"').unwrap_or(inner.len());
             (&inner[..end], &inner[end..])
-        } else if rest.starts_with('\'') {
-            let inner = &rest[1..];
+        } else if let Some(inner) = rest.strip_prefix('\'') {
             let end = inner.find('\'').unwrap_or(inner.len());
             (&inner[..end], &inner[end..])
         } else {
@@ -236,12 +237,10 @@ fn is_stylesheet_link(tag_content: &str) -> bool {
         let rest = lower[pos + 3..].trim_start();
         if let Some(rest) = rest.strip_prefix('=') {
             let rest = rest.trim_start();
-            let val = if rest.starts_with('"') {
-                let inner = &rest[1..];
+            let val = if let Some(inner) = rest.strip_prefix('"') {
                 let end = inner.find('"').unwrap_or(inner.len());
                 &inner[..end]
-            } else if rest.starts_with('\'') {
-                let inner = &rest[1..];
+            } else if let Some(inner) = rest.strip_prefix('\'') {
                 let end = inner.find('\'').unwrap_or(inner.len());
                 &inner[..end]
             } else {
@@ -492,8 +491,8 @@ pub type CidResolver = Box<dyn Fn(&str) -> Option<Vec<u8>>>;
 /// - Remote URLs return `None` when no fetcher is given (no external fetching by default).
 pub fn resolve_image_uri(
     uri: &str,
-    cid_resolver: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
-    url_fetcher: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
+    cid_resolver: ByteResolver<'_>,
+    url_fetcher: ByteResolver<'_>,
 ) -> Option<Vec<u8>> {
     if uri.starts_with("data:") {
         decode_data_uri(uri)
@@ -544,16 +543,14 @@ fn preprocess_body_bgcolor(html: &str) -> String {
     let rest = rest.trim_start();
 
     // Extract the value (may be quoted or unquoted)
-    let (value, attr_end_offset) = if rest.starts_with('"') {
-        let inner = &rest[1..];
+    let (value, attr_end_offset) = if let Some(inner) = rest.strip_prefix('"') {
         let end = inner.find('"').unwrap_or(inner.len());
         (
             &tag[bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1
                 ..bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1 + end],
             end + 2,
         )
-    } else if rest.starts_with('\'') {
-        let inner = &rest[1..];
+    } else if let Some(inner) = rest.strip_prefix('\'') {
         let end = inner.find('\'').unwrap_or(inner.len());
         (
             &tag[bg_pos + 7 + (tag_lower.len() - bg_pos - 7 - rest.len()) + 1
@@ -659,16 +656,14 @@ fn preprocess_cellpadding(html: &str) -> String {
         }
         let rest = rest[1..].trim_start();
 
-        let (value, _val_len) = if rest.starts_with('"') {
-            let inner = &rest[1..];
+        let (value, _val_len) = if let Some(inner) = rest.strip_prefix('"') {
             let end = inner.find('"').unwrap_or(inner.len());
             (
                 &html[abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1
                     ..abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1 + end],
                 end + 2,
             )
-        } else if rest.starts_with('\'') {
-            let inner = &rest[1..];
+        } else if let Some(inner) = rest.strip_prefix('\'') {
             let end = inner.find('\'').unwrap_or(inner.len());
             (
                 &html[abs_pos + 11 + (lower.len() - abs_pos - 11 - rest.len()) + 1
@@ -773,8 +768,8 @@ pub struct PreparedHtml {
 /// Without a fetcher, remote URIs are skipped (no external fetching by default).
 pub fn prepare_html(
     raw: &[u8],
-    cid_resolver: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
-    url_fetcher: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
+    cid_resolver: ByteResolver<'_>,
+    url_fetcher: ByteResolver<'_>,
 ) -> PreparedHtml {
     let decoded = decode_html(raw);
     let preprocessed = preprocess_attrs(&decoded);
@@ -794,12 +789,10 @@ pub fn prepare_html(
         }
 
         let rest = &sanitized[abs_pos..];
-        let (uri, _) = if rest.starts_with('"') {
-            let inner = &rest[1..];
+        let (uri, _) = if let Some(inner) = rest.strip_prefix('"') {
             let end = inner.find('"').unwrap_or(inner.len());
             (&inner[..end], end + 2)
-        } else if rest.starts_with('\'') {
-            let inner = &rest[1..];
+        } else if let Some(inner) = rest.strip_prefix('\'') {
             let end = inner.find('\'').unwrap_or(inner.len());
             (&inner[..end], end + 2)
         } else {

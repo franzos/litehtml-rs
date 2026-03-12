@@ -3,7 +3,7 @@
 //! Provides an email user-agent stylesheet and a convenience pipeline
 //! that wraps [`crate::html::prepare_html`] with email-specific defaults.
 
-use crate::html;
+use crate::html::{self, ByteResolver};
 
 // ---------------------------------------------------------------------------
 // Email user-agent stylesheet
@@ -28,8 +28,8 @@ p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }\n\
 /// in email-specific codebases.
 pub fn prepare_email_html(
     raw: &[u8],
-    cid_resolver: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
-    url_fetcher: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
+    cid_resolver: ByteResolver<'_>,
+    url_fetcher: ByteResolver<'_>,
 ) -> PreparedEmail {
     let prepared = html::prepare_html(raw, cid_resolver, url_fetcher);
     PreparedEmail {

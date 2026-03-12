@@ -14,9 +14,9 @@ use url::Url;
 use litehtml::pixbuf::PixbufContainer;
 use litehtml::selection::Selection;
 use litehtml::{
-    BackgroundLayer, BorderRadiuses, Borders, Color, ConicGradient, DocumentContainer,
-    DrawContext, FontDescription, FontHandle, FontMetrics, LinearGradient, ListMarker,
-    MediaFeatures, Position, RadialGradient, Size, TextTransform,
+    BackgroundLayer, BorderRadiuses, Borders, Color, ConicGradient, DocumentContainer, DrawContext,
+    FontDescription, FontHandle, FontMetrics, LinearGradient, ListMarker, MediaFeatures, Position,
+    RadialGradient, Size, TextTransform,
 };
 
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0";
@@ -92,7 +92,14 @@ impl DocumentContainer for BrowseContainer {
     fn text_width(&self, text: &str, font: FontHandle) -> f32 {
         self.inner.text_width(text, font)
     }
-    fn draw_text(&mut self, hdc: DrawContext, text: &str, font: FontHandle, color: Color, pos: Position) {
+    fn draw_text(
+        &mut self,
+        hdc: DrawContext,
+        text: &str,
+        font: FontHandle,
+        color: Color,
+        pos: Position,
+    ) {
         self.inner.draw_text(hdc, text, font, color, pos);
     }
     fn draw_list_marker(&mut self, hdc: DrawContext, marker: &ListMarker) {
@@ -140,7 +147,13 @@ impl DocumentContainer for BrowseContainer {
     ) {
         self.inner.draw_conic_gradient(hdc, layer, gradient);
     }
-    fn draw_borders(&mut self, hdc: DrawContext, borders: &Borders, draw_pos: Position, root: bool) {
+    fn draw_borders(
+        &mut self,
+        hdc: DrawContext,
+        borders: &Borders,
+        draw_pos: Position,
+        root: bool,
+    ) {
         self.inner.draw_borders(hdc, borders, draw_pos, root);
     }
     fn set_base_url(&mut self, base_url: &str) {

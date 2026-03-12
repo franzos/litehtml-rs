@@ -3,8 +3,6 @@
 //!
 //! Gated behind the `pixbuf` feature flag.
 
-#![cfg(feature = "pixbuf")]
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -390,7 +388,7 @@ fn build_rounded_rect_path(
         || radii.bottom_left_y > 0.0;
 
     if !has_radii {
-        return Rect::from_xywh(x, y, w, h).map(|r| PathBuilder::from_rect(r));
+        return Rect::from_xywh(x, y, w, h).map(PathBuilder::from_rect);
     }
 
     // Clamp radii to half the dimension so corners don't overlap
@@ -407,7 +405,7 @@ fn build_rounded_rect_path(
     let bl_y = radii.bottom_left_y.min(max_ry);
 
     // Magic number for approximating a quarter circle with a cubic bezier
-    const K: f32 = 0.552_284_75;
+    const K: f32 = 0.552_284_8;
 
     let mut pb = PathBuilder::new();
 
@@ -525,16 +523,14 @@ impl DocumentContainer for PixbufContainer {
             buf.shape_until_scroll(&mut fs, false);
 
             let mut h = size * 0.5; // fallback
-            for run in buf.layout_runs() {
-                for glyph in run.glyphs.iter() {
+            if let Some(run) = buf.layout_runs().next() {
+                if let Some(glyph) = run.glyphs.iter().next() {
                     let physical = glyph.physical((0.0, 0.0), 1.0);
                     let mut sc = self.swash_cache.borrow_mut();
                     if let Some(img) = sc.get_image_uncached(&mut fs, physical.cache_key) {
                         h = img.placement.height as f32;
                     }
-                    break;
                 }
-                break;
             }
             h
         };
@@ -595,7 +591,14 @@ impl DocumentContainer for PixbufContainer {
         self.measure_text(text, font_data) / self.scale_factor
     }
 
-    fn draw_text(&mut self, _hdc: DrawContext, text: &str, font: FontHandle, color: Color, pos: Position) {
+    fn draw_text(
+        &mut self,
+        _hdc: DrawContext,
+        text: &str,
+        font: FontHandle,
+        color: Color,
+        pos: Position,
+    ) {
         self.ensure_clip_mask();
         let fonts = self.fonts.borrow();
         let Some(font_data) = fonts.get(&font.0) else {
@@ -737,7 +740,10 @@ impl DocumentContainer for PixbufContainer {
 
         // Numbered markers delegate to draw_text (which manages its own clip mask)
         match marker_type {
-            ListStyleType::None | ListStyleType::Circle | ListStyleType::Disc | ListStyleType::Square => {}
+            ListStyleType::None
+            | ListStyleType::Circle
+            | ListStyleType::Disc
+            | ListStyleType::Square => {}
             _ => {
                 let idx = marker.index();
                 let text = format!("{}.", idx);
@@ -817,7 +823,13 @@ impl DocumentContainer for PixbufContainer {
         }
     }
 
-    fn draw_image(&mut self, _hdc: DrawContext, layer: &BackgroundLayer, url: &str, _base_url: &str) {
+    fn draw_image(
+        &mut self,
+        _hdc: DrawContext,
+        layer: &BackgroundLayer,
+        url: &str,
+        _base_url: &str,
+    ) {
         self.ensure_clip_mask();
         let Some(img) = self.images.get(url) else {
             return;
@@ -1019,7 +1031,13 @@ impl DocumentContainer for PixbufContainer {
         }
     }
 
-    fn draw_borders(&mut self, _hdc: DrawContext, borders: &Borders, draw_pos: Position, _root: bool) {
+    fn draw_borders(
+        &mut self,
+        _hdc: DrawContext,
+        borders: &Borders,
+        draw_pos: Position,
+        _root: bool,
+    ) {
         self.ensure_clip_mask();
         let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
         let x = draw_pos.x;
@@ -1157,6 +1175,7 @@ impl DocumentContainer for PixbufContainer {
 /// Blend a single pixel onto the pixmap data using source-over compositing.
 ///
 /// The pixmap stores premultiplied RGBA, so we convert accordingly.
+#[allow(clippy::too_many_arguments)]
 fn blend_pixel(
     data: &mut [u8],
     width: u32,
@@ -1218,6 +1237,7 @@ fn blend_pixel(
 }
 
 /// Draw a single border side (top, bottom, left, or right).
+#[allow(clippy::too_many_arguments)]
 fn draw_border_side(
     pixmap: &mut tiny_skia::Pixmap,
     mask: Option<&tiny_skia::Mask>,
@@ -1308,7 +1328,7 @@ fn build_circle_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
         return None;
     }
 
-    const K: f32 = 0.552_284_75;
+    const K: f32 = 0.552_284_8;
     let mut pb = PathBuilder::new();
 
     pb.move_to(cx + r, cy);

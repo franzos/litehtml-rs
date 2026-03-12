@@ -838,32 +838,47 @@ mod tests {
 
     #[test]
     fn test_find_char_at_x_negative() {
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), -5.0), 0);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), -5.0),
+            0
+        );
     }
 
     #[test]
     fn test_find_char_at_x_zero() {
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 0.0), 0);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 0.0),
+            0
+        );
     }
 
     #[test]
     fn test_find_char_at_x_first_char() {
         // Each char is 8px. Midpoint of first char is 4px.
         // target_x < 4 => index 0, target_x >= 4 => next iteration
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 2.0), 0);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 2.0),
+            0
+        );
     }
 
     #[test]
     fn test_find_char_at_x_second_char() {
         // After "H" = 8px, after "He" = 16px. Midpoint = 12px.
         // target_x=10 < 12 => returns 1 (the 'e')
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 10.0), 1);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 10.0),
+            1
+        );
     }
 
     #[test]
     fn test_find_char_at_x_past_end() {
         // "Hello" is 5 chars * 8px = 40px. target_x=100 past end => returns 5 (len)
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 100.0), 5);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 100.0),
+            5
+        );
     }
 
     #[test]
@@ -872,7 +887,10 @@ mod tests {
         // target_x=12 is NOT less than midpoint, so we continue.
         // After "Hel" = 24px. Midpoint of 'l' = (16+24)/2 = 20.
         // 12 < 20 => returns 2.
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 12.0), 2);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 12.0),
+            2
+        );
     }
 
     // -------------------------------------------------------------------
@@ -913,8 +931,7 @@ mod tests {
     #[test]
     fn test_extend_to_without_start_is_noop() {
         let mut container = TestContainer::new();
-        let mut doc =
-            Document::from_html("<p>Hello</p>", &mut container, None, None).unwrap();
+        let mut doc = Document::from_html("<p>Hello</p>", &mut container, None, None).unwrap();
         let _ = doc.render(800.0);
 
         let mut sel = Selection::for_document(&doc);
@@ -938,7 +955,10 @@ mod tests {
         sel.start_at(&doc, &measure_text, 10.0, 10.0, 10.0, 10.0);
 
         // After start_at, we have a start but no end yet
-        assert!(!sel.is_active(), "start_at alone should not make selection active");
+        assert!(
+            !sel.is_active(),
+            "start_at alone should not make selection active"
+        );
         assert!(sel.selected_text().is_none());
     }
 
@@ -953,7 +973,10 @@ mod tests {
         sel.start_at(&doc, &measure_text, 10.0, 10.0, 10.0, 10.0);
         sel.extend_to(&doc, &measure_text, 50.0, 10.0, 50.0, 10.0);
 
-        assert!(sel.is_active(), "selection should be active after start + extend");
+        assert!(
+            sel.is_active(),
+            "selection should be active after start + extend"
+        );
     }
 
     #[test]
@@ -968,7 +991,10 @@ mod tests {
         sel.extend_to(&doc, &measure_text, 80.0, 10.0, 80.0, 10.0);
 
         let text = sel.selected_text();
-        assert!(text.is_some(), "selected_text should return Some after selection");
+        assert!(
+            text.is_some(),
+            "selected_text should return Some after selection"
+        );
 
         let text = text.unwrap();
         assert!(!text.is_empty(), "selected text should not be empty");
@@ -1015,7 +1041,10 @@ mod tests {
         // If we got a real selection, rectangles should have positive dimensions
         for rect in rects {
             assert!(rect.width >= 0.0, "rectangle width should be non-negative");
-            assert!(rect.height >= 0.0, "rectangle height should be non-negative");
+            assert!(
+                rect.height >= 0.0,
+                "rectangle height should be non-negative"
+            );
         }
     }
 
@@ -1034,7 +1063,10 @@ mod tests {
 
         assert!(sel.is_active(), "multi-element selection should be active");
         let text = sel.selected_text();
-        assert!(text.is_some(), "multi-element selection should produce text");
+        assert!(
+            text.is_some(),
+            "multi-element selection should produce text"
+        );
     }
 
     #[test]
@@ -1062,8 +1094,7 @@ mod tests {
     #[test]
     fn test_selection_same_point_produces_empty_or_minimal_text() {
         let mut container = TestContainer::new();
-        let mut doc =
-            Document::from_html("<p>Hello</p>", &mut container, None, None).unwrap();
+        let mut doc = Document::from_html("<p>Hello</p>", &mut container, None, None).unwrap();
         let _ = doc.render(800.0);
 
         let mut sel = Selection::for_document(&doc);
@@ -1082,8 +1113,7 @@ mod tests {
     #[test]
     fn test_selection_on_empty_body() {
         let mut container = TestContainer::new();
-        let mut doc =
-            Document::from_html("<body></body>", &mut container, None, None).unwrap();
+        let mut doc = Document::from_html("<body></body>", &mut container, None, None).unwrap();
         let _ = doc.render(800.0);
 
         let mut sel = Selection::for_document(&doc);
@@ -1114,7 +1144,10 @@ mod tests {
         assert!(sel.is_active(), "styled content selection should be active");
         let text = sel.selected_text().unwrap_or_default();
         // The text should come from the inline elements
-        assert!(!text.is_empty(), "styled content selection should return text");
+        assert!(
+            !text.is_empty(),
+            "styled content selection should return text"
+        );
     }
 
     #[test]
@@ -1201,13 +1234,19 @@ mod tests {
         //   After 'H': width=8, midpoint=(0+8)/2=4. 8 < 4? No.
         //   After 'e': width=16, midpoint=(8+16)/2=12. 8 < 12? Yes => returns 1.
         // So target_x at exact char boundary 8.0 lands on char index 1.
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 8.0), 1);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 8.0),
+            1
+        );
 
         // At target_x = 16.0 (exact boundary after "He"):
         //   After 'H': width=8, mid=4. 16<4? No.
         //   After 'e': width=16, mid=12. 16<12? No.
         //   After 'l': width=24, mid=20. 16<20? Yes => returns 2.
-        assert_eq!(find_char_at_x(&measure_text, "Hello", FontHandle(1), 16.0), 2);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hello", FontHandle(1), 16.0),
+            2
+        );
     }
 
     #[test]
@@ -1236,12 +1275,18 @@ mod tests {
         //
         // target_x=10: after 'H' mid=4, 10<4? No.
         //              after 'ë' mid=(8+24)/2=16, 10<16? Yes => returns 1.
-        assert_eq!(find_char_at_x(&measure_text, "Hëllo", FontHandle(1), 10.0), 1);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hëllo", FontHandle(1), 10.0),
+            1
+        );
 
         // target_x=20: after 'H' mid=4, No.
         //              after 'ë' mid=16, 20<16? No.
         //              after 'l' mid=(24+32)/2=28, 20<28? Yes => returns 2.
-        assert_eq!(find_char_at_x(&measure_text, "Hëllo", FontHandle(1), 20.0), 2);
+        assert_eq!(
+            find_char_at_x(&measure_text, "Hëllo", FontHandle(1), 20.0),
+            2
+        );
     }
 
     // -------------------------------------------------------------------
