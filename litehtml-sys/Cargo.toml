@@ -1,6 +1,6 @@
 [package]
 name = "litehtml-sys"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 license = "MIT AND BSD-3-Clause AND Apache-2.0"
 authors = ["Franz Geffke <mail@gofranz.com>"]
@@ -14,9 +14,10 @@ exclude = ["tests/"]
 [features]
 default = ["vendored"]
 vendored = []
+buildtime-bindgen = ["bindgen"]
 
 [build-dependencies]
 cc = "1"
-bindgen = "0.71"
+bindgen = { version = "0.71", optional = true }
 
 [dependencies]

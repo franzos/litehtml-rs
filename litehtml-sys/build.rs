@@ -14,7 +14,7 @@ fn main() {
         build_system(&out_dir, &csrc_dir);
     }
 
-    generate_bindings(&csrc_dir, &out_dir, vendored, &manifest_dir);
+    write_bindings(&csrc_dir, &out_dir, vendored, &manifest_dir);
 
     println!("cargo:rerun-if-changed={}", csrc_dir.display());
 }
@@ -248,7 +248,10 @@ fn find_library(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn generate_bindings(csrc_dir: &Path, out_dir: &Path, vendored: bool, manifest_dir: &Path) {
+#[cfg(feature = "buildtime-bindgen")]
+fn write_bindings(csrc_dir: &Path, out_dir: &Path, vendored: bool, manifest_dir: &Path) {
+    let out_bindings = out_dir.join("bindings.rs");
+
     let mut builder = bindgen::Builder::default()
         .header(csrc_dir.join("litehtml_c.h").to_str().unwrap())
         .allowlist_function("lh_.*")
@@ -268,6 +271,14 @@ fn generate_bindings(csrc_dir: &Path, out_dir: &Path, vendored: bool, manifest_d
     let bindings = builder.generate().expect("failed to generate bindings");
 
     bindings
-        .write_to_file(out_dir.join("bindings.rs"))
+        .write_to_file(out_bindings)
         .expect("failed to write bindings");
+}
+
+#[cfg(not(feature = "buildtime-bindgen"))]
+fn write_bindings(_csrc_dir: &Path, out_dir: &Path, _vendored: bool, manifest_dir: &Path) {
+    let pregenerated = manifest_dir.join("src/bindings.rs");
+    let out_bindings = out_dir.join("bindings.rs");
+    std::fs::copy(&pregenerated, &out_bindings).expect("failed to copy pre-generated bindings");
+    println!("cargo:rerun-if-changed={}", pregenerated.display());
 }
