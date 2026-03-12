@@ -15,8 +15,8 @@ use litehtml::pixbuf::PixbufContainer;
 use litehtml::selection::Selection;
 use litehtml::{
     BackgroundLayer, BorderRadiuses, Borders, Color, ConicGradient, DocumentContainer,
-    FontDescription, FontMetrics, LinearGradient, ListMarker, MediaFeatures, Position,
-    RadialGradient, Size, TextTransform,
+    DrawContext, FontDescription, FontHandle, FontMetrics, LinearGradient, ListMarker,
+    MediaFeatures, Position, RadialGradient, Size, TextTransform,
 };
 
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0";
@@ -83,19 +83,19 @@ impl BrowseContainer {
 
 // Delegate everything to inner, override import_css, set_base_url, load_image
 impl DocumentContainer for BrowseContainer {
-    fn create_font(&mut self, descr: &FontDescription) -> (usize, FontMetrics) {
+    fn create_font(&mut self, descr: &FontDescription) -> (FontHandle, FontMetrics) {
         self.inner.create_font(descr)
     }
-    fn delete_font(&mut self, font: usize) {
+    fn delete_font(&mut self, font: FontHandle) {
         self.inner.delete_font(font);
     }
-    fn text_width(&self, text: &str, font: usize) -> f32 {
+    fn text_width(&self, text: &str, font: FontHandle) -> f32 {
         self.inner.text_width(text, font)
     }
-    fn draw_text(&mut self, hdc: usize, text: &str, font: usize, color: Color, pos: Position) {
+    fn draw_text(&mut self, hdc: DrawContext, text: &str, font: FontHandle, color: Color, pos: Position) {
         self.inner.draw_text(hdc, text, font, color, pos);
     }
-    fn draw_list_marker(&mut self, hdc: usize, marker: &ListMarker) {
+    fn draw_list_marker(&mut self, hdc: DrawContext, marker: &ListMarker) {
         self.inner.draw_list_marker(hdc, marker);
     }
     fn load_image(&mut self, src: &str, baseurl: &str, redraw_on_ready: bool) {
@@ -110,15 +110,15 @@ impl DocumentContainer for BrowseContainer {
     fn get_image_size(&self, src: &str, baseurl: &str) -> Size {
         self.inner.get_image_size(src, baseurl)
     }
-    fn draw_image(&mut self, hdc: usize, layer: &BackgroundLayer, url: &str, base_url: &str) {
+    fn draw_image(&mut self, hdc: DrawContext, layer: &BackgroundLayer, url: &str, base_url: &str) {
         self.inner.draw_image(hdc, layer, url, base_url);
     }
-    fn draw_solid_fill(&mut self, hdc: usize, layer: &BackgroundLayer, color: Color) {
+    fn draw_solid_fill(&mut self, hdc: DrawContext, layer: &BackgroundLayer, color: Color) {
         self.inner.draw_solid_fill(hdc, layer, color);
     }
     fn draw_linear_gradient(
         &mut self,
-        hdc: usize,
+        hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &LinearGradient,
     ) {
@@ -126,7 +126,7 @@ impl DocumentContainer for BrowseContainer {
     }
     fn draw_radial_gradient(
         &mut self,
-        hdc: usize,
+        hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &RadialGradient,
     ) {
@@ -134,17 +134,14 @@ impl DocumentContainer for BrowseContainer {
     }
     fn draw_conic_gradient(
         &mut self,
-        hdc: usize,
+        hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &ConicGradient,
     ) {
         self.inner.draw_conic_gradient(hdc, layer, gradient);
     }
-    fn draw_borders(&mut self, hdc: usize, borders: &Borders, draw_pos: Position, root: bool) {
+    fn draw_borders(&mut self, hdc: DrawContext, borders: &Borders, draw_pos: Position, root: bool) {
         self.inner.draw_borders(hdc, borders, draw_pos, root);
-    }
-    fn set_caption(&mut self, caption: &str) {
-        self.inner.set_caption(caption);
     }
     fn set_base_url(&mut self, base_url: &str) {
         if let Ok(u) = Url::parse(base_url) {
@@ -153,12 +150,6 @@ impl DocumentContainer for BrowseContainer {
             self.base_url = u;
         }
         self.inner.set_base_url(base_url);
-    }
-    fn on_anchor_click(&mut self, url: &str) {
-        self.inner.on_anchor_click(url);
-    }
-    fn set_cursor(&mut self, cursor: &str) {
-        self.inner.set_cursor(cursor);
     }
     fn transform_text(&self, text: &str, tt: TextTransform) -> String {
         self.inner.transform_text(text, tt)
@@ -397,7 +388,7 @@ fn main() {
     if let Ok(mut doc) = litehtml::Document::from_html(&html, &mut container, None, None) {
         let _ = doc.render(width as f32);
         doc.draw(
-            0,
+            DrawContext::default(),
             0.0,
             0.0,
             Some(Position {

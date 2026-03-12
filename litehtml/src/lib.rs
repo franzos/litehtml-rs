@@ -170,6 +170,21 @@ pub struct ColorPoint {
     pub color: Color,
 }
 
+/// Opaque handle to a font created by [`DocumentContainer::create_font`].
+///
+/// This is an opaque identifier — the actual value is determined by the
+/// container implementation. Compare handles for equality; don't assume
+/// anything about the numeric value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct FontHandle(pub usize);
+
+/// Handle to a device context passed through litehtml's draw calls.
+///
+/// Inherited from litehtml's Win32 origins. Typically unused in modern
+/// implementations — pass `DrawContext::default()` (which wraps `0`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct DrawContext(pub usize);
+
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
@@ -336,6 +351,180 @@ impl HueInterpolation {
             3 => Self::Increasing,
             4 => Self::Decreasing,
             _ => Self::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum FontStyle {
+    #[default]
+    Normal = 0,
+    Italic = 1,
+}
+
+impl FontStyle {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            1 => Self::Italic,
+            _ => Self::Normal,
+        }
+    }
+}
+
+/// CSS `text-decoration-line` as a bitfield.
+///
+/// - `0x00` = none
+/// - `0x01` = underline
+/// - `0x02` = overline
+/// - `0x04` = line-through
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TextDecorationLine(pub i32);
+
+impl TextDecorationLine {
+    pub const NONE: Self = Self(0x00);
+    pub const UNDERLINE: Self = Self(0x01);
+    pub const OVERLINE: Self = Self(0x02);
+    pub const LINE_THROUGH: Self = Self(0x04);
+
+    pub fn contains(self, flag: Self) -> bool {
+        self.0 & flag.0 != 0
+    }
+}
+
+/// CSS `text-emphasis-position` as a bitfield.
+///
+/// - `0x00` = over
+/// - `0x01` = under
+/// - `0x02` = left
+/// - `0x04` = right
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TextEmphasisPosition(pub i32);
+
+impl TextEmphasisPosition {
+    pub const OVER: Self = Self(0x00);
+    pub const UNDER: Self = Self(0x01);
+    pub const LEFT: Self = Self(0x02);
+    pub const RIGHT: Self = Self(0x04);
+
+    pub fn contains(self, flag: Self) -> bool {
+        self.0 & flag.0 != 0
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ListStyleType {
+    #[default]
+    None = 0,
+    Circle = 1,
+    Disc = 2,
+    Square = 3,
+    Armenian = 4,
+    CjkIdeographic = 5,
+    Decimal = 6,
+    DecimalLeadingZero = 7,
+    Georgian = 8,
+    Hebrew = 9,
+    Hiragana = 10,
+    HiraganaIroha = 11,
+    Katakana = 12,
+    KatakanaIroha = 13,
+    LowerAlpha = 14,
+    LowerGreek = 15,
+    LowerLatin = 16,
+    LowerRoman = 17,
+    UpperAlpha = 18,
+    UpperLatin = 19,
+    UpperRoman = 20,
+}
+
+impl ListStyleType {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            0 => Self::None,
+            1 => Self::Circle,
+            2 => Self::Disc,
+            3 => Self::Square,
+            4 => Self::Armenian,
+            5 => Self::CjkIdeographic,
+            6 => Self::Decimal,
+            7 => Self::DecimalLeadingZero,
+            8 => Self::Georgian,
+            9 => Self::Hebrew,
+            10 => Self::Hiragana,
+            11 => Self::HiraganaIroha,
+            12 => Self::Katakana,
+            13 => Self::KatakanaIroha,
+            14 => Self::LowerAlpha,
+            15 => Self::LowerGreek,
+            16 => Self::LowerLatin,
+            17 => Self::LowerRoman,
+            18 => Self::UpperAlpha,
+            19 => Self::UpperLatin,
+            20 => Self::UpperRoman,
+            _ => Self::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum BackgroundAttachment {
+    #[default]
+    Scroll = 0,
+    Fixed = 1,
+}
+
+impl BackgroundAttachment {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            1 => Self::Fixed,
+            _ => Self::Scroll,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum BackgroundRepeat {
+    #[default]
+    Repeat = 0,
+    RepeatX = 1,
+    RepeatY = 2,
+    NoRepeat = 3,
+}
+
+impl BackgroundRepeat {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            0 => Self::Repeat,
+            1 => Self::RepeatX,
+            2 => Self::RepeatY,
+            3 => Self::NoRepeat,
+            _ => Self::Repeat,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum TextAlign {
+    #[default]
+    Left = 0,
+    Right = 1,
+    Center = 2,
+    Justify = 3,
+}
+
+impl TextAlign {
+    fn from_c_int(v: c_int) -> Self {
+        match v {
+            0 => Self::Left,
+            1 => Self::Right,
+            2 => Self::Center,
+            3 => Self::Justify,
+            _ => Self::Left,
         }
     }
 }
@@ -626,16 +815,16 @@ impl<'a> FontDescription<'a> {
         unsafe { sys::lh_font_description_size(self.ptr) }
     }
 
-    pub fn style(&self) -> i32 {
-        unsafe { sys::lh_font_description_style(self.ptr) }
+    pub fn style(&self) -> FontStyle {
+        FontStyle::from_c_int(unsafe { sys::lh_font_description_style(self.ptr) })
     }
 
     pub fn weight(&self) -> i32 {
         unsafe { sys::lh_font_description_weight(self.ptr) }
     }
 
-    pub fn decoration_line(&self) -> i32 {
-        unsafe { sys::lh_font_description_decoration_line(self.ptr) }
+    pub fn decoration_line(&self) -> TextDecorationLine {
+        TextDecorationLine(unsafe { sys::lh_font_description_decoration_line(self.ptr) })
     }
 
     pub fn decoration_thickness(&self) -> DecorationThickness {
@@ -679,8 +868,8 @@ impl<'a> FontDescription<'a> {
         Color::from(unsafe { sys::lh_font_description_emphasis_color(self.ptr) })
     }
 
-    pub fn emphasis_position(&self) -> i32 {
-        unsafe { sys::lh_font_description_emphasis_position(self.ptr) }
+    pub fn emphasis_position(&self) -> TextEmphasisPosition {
+        TextEmphasisPosition(unsafe { sys::lh_font_description_emphasis_position(self.ptr) })
     }
 }
 
@@ -741,8 +930,8 @@ impl<'a> ListMarker<'a> {
         }
     }
 
-    pub fn marker_type(&self) -> i32 {
-        unsafe { sys::lh_list_marker_type(self.ptr) }
+    pub fn marker_type(&self) -> ListStyleType {
+        ListStyleType::from_c_int(unsafe { sys::lh_list_marker_type(self.ptr) })
     }
 
     pub fn color(&self) -> Color {
@@ -757,8 +946,8 @@ impl<'a> ListMarker<'a> {
         unsafe { sys::lh_list_marker_index(self.ptr) }
     }
 
-    pub fn font(&self) -> usize {
-        unsafe { sys::lh_list_marker_font(self.ptr) }
+    pub fn font(&self) -> FontHandle {
+        FontHandle(unsafe { sys::lh_list_marker_font(self.ptr) })
     }
 }
 
@@ -809,12 +998,12 @@ impl<'a> BackgroundLayer<'a> {
         Position::from(unsafe { sys::lh_background_layer_origin_box(self.ptr) })
     }
 
-    pub fn attachment(&self) -> i32 {
-        unsafe { sys::lh_background_layer_attachment(self.ptr) }
+    pub fn attachment(&self) -> BackgroundAttachment {
+        BackgroundAttachment::from_c_int(unsafe { sys::lh_background_layer_attachment(self.ptr) })
     }
 
-    pub fn repeat(&self) -> i32 {
-        unsafe { sys::lh_background_layer_repeat(self.ptr) }
+    pub fn repeat(&self) -> BackgroundRepeat {
+        BackgroundRepeat::from_c_int(unsafe { sys::lh_background_layer_repeat(self.ptr) })
     }
 
     pub fn is_root(&self) -> bool {
@@ -1049,16 +1238,16 @@ impl std::fmt::Debug for ConicGradient<'_> {
 pub trait DocumentContainer {
     /// Create a font matching the given description. Returns a handle (used as
     /// an opaque identifier in subsequent calls) and the resulting metrics.
-    fn create_font(&mut self, descr: &FontDescription) -> (usize, FontMetrics);
+    fn create_font(&mut self, descr: &FontDescription) -> (FontHandle, FontMetrics);
 
     /// Release resources associated with a previously created font handle.
-    fn delete_font(&mut self, font: usize);
+    fn delete_font(&mut self, font: FontHandle);
 
     /// Measure the width of `text` when rendered with `font`.
-    fn text_width(&self, text: &str, font: usize) -> f32;
+    fn text_width(&self, text: &str, font: FontHandle) -> f32;
 
     /// Draw `text` at `pos` using `font` and `color`.
-    fn draw_text(&mut self, hdc: usize, text: &str, font: usize, color: Color, pos: Position);
+    fn draw_text(&mut self, hdc: DrawContext, text: &str, font: FontHandle, color: Color, pos: Position);
 
     /// Convert typographic points to device pixels.
     fn pt_to_px(&self, pt: f32) -> f32 {
@@ -1076,46 +1265,51 @@ pub trait DocumentContainer {
     }
 
     /// Draw a list item marker (bullet, number, etc.).
-    fn draw_list_marker(&mut self, hdc: usize, marker: &ListMarker) {}
+    fn draw_list_marker(&mut self, hdc: DrawContext, marker: &ListMarker) {}
 
     /// Notify the container that an image should be loaded.
-    fn load_image(&mut self, src: &str, baseurl: &str, redraw_on_ready: bool);
+    fn load_image(&mut self, src: &str, baseurl: &str, redraw_on_ready: bool) {}
 
     /// Return the intrinsic size of a previously loaded image.
-    fn get_image_size(&self, src: &str, baseurl: &str) -> Size;
+    fn get_image_size(&self, src: &str, baseurl: &str) -> Size {
+        Size::default()
+    }
 
     /// Draw a background image layer.
-    fn draw_image(&mut self, hdc: usize, layer: &BackgroundLayer, url: &str, base_url: &str);
+    fn draw_image(&mut self, hdc: DrawContext, layer: &BackgroundLayer, url: &str, base_url: &str) {}
 
     /// Draw a solid color background layer.
-    fn draw_solid_fill(&mut self, hdc: usize, layer: &BackgroundLayer, color: Color);
+    fn draw_solid_fill(&mut self, hdc: DrawContext, layer: &BackgroundLayer, color: Color) {}
 
     /// Draw a linear gradient background layer.
     fn draw_linear_gradient(
         &mut self,
-        hdc: usize,
+        hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &LinearGradient,
-    );
+    ) {
+    }
 
     /// Draw a radial gradient background layer.
     fn draw_radial_gradient(
         &mut self,
-        hdc: usize,
+        hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &RadialGradient,
-    );
+    ) {
+    }
 
     /// Draw a conic gradient background layer.
     fn draw_conic_gradient(
         &mut self,
-        hdc: usize,
+        hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &ConicGradient,
-    );
+    ) {
+    }
 
     /// Draw element borders.
-    fn draw_borders(&mut self, hdc: usize, borders: &Borders, draw_pos: Position, root: bool) {}
+    fn draw_borders(&mut self, hdc: DrawContext, borders: &Borders, draw_pos: Position, root: bool) {}
 
     /// Set the document title.
     fn set_caption(&mut self, caption: &str) {}
@@ -1269,7 +1463,7 @@ unsafe extern "C" fn cb_create_font(
         if !fm.is_null() {
             *fm = metrics.into();
         }
-        handle
+        handle.0
     }))
     .unwrap_or(0)
 }
@@ -1277,7 +1471,7 @@ unsafe extern "C" fn cb_create_font(
 unsafe extern "C" fn cb_delete_font(user_data: *mut c_void, h_font: usize) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
-        bridge.container.delete_font(h_font);
+        bridge.container.delete_font(FontHandle(h_font));
     }));
 }
 
@@ -1289,7 +1483,7 @@ unsafe extern "C" fn cb_text_width(
     catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
         let text = c_str_to_str(text);
-        bridge.container.text_width(text, h_font)
+        bridge.container.text_width(text, FontHandle(h_font))
     }))
     .unwrap_or(0.0)
 }
@@ -1307,7 +1501,7 @@ unsafe extern "C" fn cb_draw_text(
         let text = c_str_to_str(text);
         bridge
             .container
-            .draw_text(hdc, text, h_font, Color::from(color), Position::from(pos));
+            .draw_text(DrawContext(hdc), text, FontHandle(h_font), Color::from(color), Position::from(pos));
     }));
 }
 
@@ -1343,7 +1537,7 @@ unsafe extern "C" fn cb_draw_list_marker(
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let bridge = bridge_from_user_data(user_data);
         let marker = ListMarker::from_ptr(marker);
-        bridge.container.draw_list_marker(hdc, &marker);
+        bridge.container.draw_list_marker(DrawContext(hdc), &marker);
     }));
 }
 
@@ -1392,7 +1586,7 @@ unsafe extern "C" fn cb_draw_image(
         let layer = BackgroundLayer::from_ptr(layer);
         let url = c_str_to_str(url);
         let base_url = c_str_to_str(base_url);
-        bridge.container.draw_image(hdc, &layer, url, base_url);
+        bridge.container.draw_image(DrawContext(hdc), &layer, url, base_url);
     }));
 }
 
@@ -1407,7 +1601,7 @@ unsafe extern "C" fn cb_draw_solid_fill(
         let layer = BackgroundLayer::from_ptr(layer);
         bridge
             .container
-            .draw_solid_fill(hdc, &layer, Color::from(color));
+            .draw_solid_fill(DrawContext(hdc), &layer, Color::from(color));
     }));
 }
 
@@ -1423,7 +1617,7 @@ unsafe extern "C" fn cb_draw_linear_gradient(
         let gradient = LinearGradient::from_ptr(gradient);
         bridge
             .container
-            .draw_linear_gradient(hdc, &layer, &gradient);
+            .draw_linear_gradient(DrawContext(hdc), &layer, &gradient);
     }));
 }
 
@@ -1439,7 +1633,7 @@ unsafe extern "C" fn cb_draw_radial_gradient(
         let gradient = RadialGradient::from_ptr(gradient);
         bridge
             .container
-            .draw_radial_gradient(hdc, &layer, &gradient);
+            .draw_radial_gradient(DrawContext(hdc), &layer, &gradient);
     }));
 }
 
@@ -1453,7 +1647,7 @@ unsafe extern "C" fn cb_draw_conic_gradient(
         let bridge = bridge_from_user_data(user_data);
         let layer = BackgroundLayer::from_ptr(layer);
         let gradient = ConicGradient::from_ptr(gradient);
-        bridge.container.draw_conic_gradient(hdc, &layer, &gradient);
+        bridge.container.draw_conic_gradient(DrawContext(hdc), &layer, &gradient);
     }));
 }
 
@@ -1469,7 +1663,7 @@ unsafe extern "C" fn cb_draw_borders(
         let borders = Borders::from(borders);
         bridge
             .container
-            .draw_borders(hdc, &borders, Position::from(draw_pos), root != 0);
+            .draw_borders(DrawContext(hdc), &borders, Position::from(draw_pos), root != 0);
     }));
 }
 
@@ -1762,8 +1956,8 @@ impl<'a> Element<'a> {
     }
 
     /// Font handle from the element's computed CSS.
-    pub fn font(&self) -> usize {
-        unsafe { sys::lh_element_get_font(self.ptr) }
+    pub fn font(&self) -> FontHandle {
+        FontHandle(unsafe { sys::lh_element_get_font(self.ptr) })
     }
 
     /// Font size from the element's computed CSS.
@@ -1875,9 +2069,9 @@ impl<'a> Element<'a> {
         result
     }
 
-    /// Computed text-align: 0=left, 1=right, 2=center, 3=justify.
-    pub fn text_align(&self) -> i32 {
-        unsafe { sys::lh_element_get_text_align(self.ptr) }
+    /// Computed CSS `text-align` value.
+    pub fn text_align(&self) -> TextAlign {
+        TextAlign::from_c_int(unsafe { sys::lh_element_get_text_align(self.ptr) })
     }
 
     /// Computed line-height in pixels.
@@ -1991,11 +2185,11 @@ impl<'a> Document<'a> {
     /// Draw the document into the rendering context identified by `hdc`,
     /// at offset `(x, y)`. If `clip` is `Some`, only the intersection with
     /// the clip rectangle is drawn.
-    pub fn draw(&mut self, hdc: usize, x: f32, y: f32, clip: Option<Position>) {
+    pub fn draw(&mut self, hdc: DrawContext, x: f32, y: f32, clip: Option<Position>) {
         let clip_c = clip.map(sys::lh_position_t::from);
         let clip_ptr = clip_c.as_ref().map_or(std::ptr::null(), |c| c as *const _);
         unsafe {
-            sys::lh_document_draw(self.raw, hdc, x, y, clip_ptr);
+            sys::lh_document_draw(self.raw, hdc.0, x, y, clip_ptr);
         }
     }
 
@@ -2095,6 +2289,28 @@ impl<'a> Document<'a> {
         }
     }
 
+    /// Temporarily access the container mutably while the document is alive.
+    ///
+    /// This is useful for updating container state (e.g., loading image data)
+    /// without dropping and recreating the document. The closure receives a
+    /// mutable reference to the container.
+    ///
+    /// # Safety
+    ///
+    /// The closure **must not** call any `Document` methods or trigger any
+    /// litehtml operations. Doing so would create aliased mutable references
+    /// (the document already holds `&mut` to the container through the bridge).
+    ///
+    /// This method exists to formalize the pattern of mutating container state
+    /// between document operations (e.g., between `render` and `draw`).
+    pub unsafe fn with_container_mut<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(&mut dyn DocumentContainer) -> R,
+    {
+        let bridge = &mut *self.bridge;
+        f(bridge.container)
+    }
+
     /// Parse an HTML fragment and append the resulting elements as children
     /// of `parent`.
     ///
@@ -2166,7 +2382,7 @@ mod tests {
     }
 
     impl DocumentContainer for TestContainer {
-        fn create_font(&mut self, _descr: &FontDescription) -> (usize, FontMetrics) {
+        fn create_font(&mut self, _descr: &FontDescription) -> (FontHandle, FontMetrics) {
             let id = self.next_font_id;
             self.next_font_id += 1;
             let metrics = FontMetrics {
@@ -2180,89 +2396,25 @@ mod tests {
                 sub_shift: 0.0,
                 super_shift: 0.0,
             };
-            (id, metrics)
+            (FontHandle(id), metrics)
         }
 
-        fn delete_font(&mut self, _font: usize) {}
+        fn delete_font(&mut self, _font: FontHandle) {}
 
-        fn text_width(&self, text: &str, _font: usize) -> f32 {
+        fn text_width(&self, text: &str, _font: FontHandle) -> f32 {
             // Rough approximation: 8 px per character
             text.len() as f32 * 8.0
         }
 
         fn draw_text(
             &mut self,
-            _hdc: usize,
+            _hdc: DrawContext,
             _text: &str,
-            _font: usize,
+            _font: FontHandle,
             _color: Color,
             _pos: Position,
         ) {
         }
-
-        fn draw_list_marker(&mut self, _hdc: usize, _marker: &ListMarker) {}
-
-        fn load_image(&mut self, _src: &str, _baseurl: &str, _redraw_on_ready: bool) {}
-
-        fn get_image_size(&self, _src: &str, _baseurl: &str) -> Size {
-            Size::default()
-        }
-
-        fn draw_image(
-            &mut self,
-            _hdc: usize,
-            _layer: &BackgroundLayer,
-            _url: &str,
-            _base_url: &str,
-        ) {
-        }
-
-        fn draw_solid_fill(&mut self, _hdc: usize, _layer: &BackgroundLayer, _color: Color) {}
-
-        fn draw_linear_gradient(
-            &mut self,
-            _hdc: usize,
-            _layer: &BackgroundLayer,
-            _gradient: &LinearGradient,
-        ) {
-        }
-
-        fn draw_radial_gradient(
-            &mut self,
-            _hdc: usize,
-            _layer: &BackgroundLayer,
-            _gradient: &RadialGradient,
-        ) {
-        }
-
-        fn draw_conic_gradient(
-            &mut self,
-            _hdc: usize,
-            _layer: &BackgroundLayer,
-            _gradient: &ConicGradient,
-        ) {
-        }
-
-        fn draw_borders(
-            &mut self,
-            _hdc: usize,
-            _borders: &Borders,
-            _draw_pos: Position,
-            _root: bool,
-        ) {
-        }
-
-        fn set_caption(&mut self, _caption: &str) {}
-
-        fn set_base_url(&mut self, _base_url: &str) {}
-
-        fn on_anchor_click(&mut self, _url: &str) {}
-
-        fn set_cursor(&mut self, _cursor: &str) {}
-
-        fn set_clip(&mut self, _pos: Position, _radius: BorderRadiuses) {}
-
-        fn del_clip(&mut self) {}
 
         fn get_viewport(&self) -> Position {
             Position {
@@ -2318,7 +2470,7 @@ mod tests {
             width: 800.0,
             height: 600.0,
         };
-        doc.draw(0, 0.0, 0.0, Some(clip));
+        doc.draw(DrawContext::default(), 0.0, 0.0, Some(clip));
     }
 
     #[test]

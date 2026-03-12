@@ -17,8 +17,9 @@ use tiny_skia::{
 
 use crate::{
     BackgroundLayer, BorderRadiuses, BorderStyle, Borders, Color, ColorPoint, ConicGradient,
-    DocumentContainer, FontDescription, FontMetrics, LinearGradient, ListMarker, MediaFeatures,
-    MediaType, Position, RadialGradient, Size, TextTransform,
+    DocumentContainer, DrawContext, FontDescription, FontHandle, FontMetrics, FontStyle,
+    LinearGradient, ListMarker, ListStyleType, MediaFeatures, MediaType, Position, RadialGradient,
+    Size, TextTransform,
 };
 
 /// Internal font data associated with a font handle.
@@ -318,13 +319,13 @@ impl PixbufContainer {
     /// The closure captures shared references to the font system and font map,
     /// so it can be used independently of `&self` (e.g. passed into litehtml
     /// callbacks).
-    pub fn text_measure_fn(&self) -> impl Fn(&str, usize) -> f32 {
+    pub fn text_measure_fn(&self) -> impl Fn(&str, FontHandle) -> f32 {
         let fonts = Rc::clone(&self.fonts);
         let font_system = Rc::clone(&self.font_system);
         let scale_factor = self.scale_factor;
-        move |text: &str, font: usize| -> f32 {
+        move |text: &str, font: FontHandle| -> f32 {
             let fonts_ref = fonts.borrow();
-            let Some(font_data) = fonts_ref.get(&font) else {
+            let Some(font_data) = fonts_ref.get(&font.0) else {
                 return text.len() as f32 * 8.0;
             };
             let mut fs = font_system.borrow_mut();
@@ -483,7 +484,7 @@ fn color_points_to_stops(points: &[ColorPoint]) -> Vec<GradientStop> {
 }
 
 impl DocumentContainer for PixbufContainer {
-    fn create_font(&mut self, descr: &FontDescription) -> (usize, FontMetrics) {
+    fn create_font(&mut self, descr: &FontDescription) -> (FontHandle, FontMetrics) {
         let family_str = descr.family().to_string();
         let size = descr.size();
         let s = self.scale_factor;
@@ -491,8 +492,7 @@ impl DocumentContainer for PixbufContainer {
 
         let weight = Weight(descr.weight() as u16);
         let style = match descr.style() {
-            1 => Style::Italic,
-            2 => Style::Oblique,
+            FontStyle::Italic => Style::Italic,
             _ => Style::Normal,
         };
 
@@ -580,25 +580,25 @@ impl DocumentContainer for PixbufContainer {
             },
         );
 
-        (id, metrics)
+        (FontHandle(id), metrics)
     }
 
-    fn delete_font(&mut self, font: usize) {
-        self.fonts.borrow_mut().remove(&font);
+    fn delete_font(&mut self, font: FontHandle) {
+        self.fonts.borrow_mut().remove(&font.0);
     }
 
-    fn text_width(&self, text: &str, font: usize) -> f32 {
+    fn text_width(&self, text: &str, font: FontHandle) -> f32 {
         let fonts = self.fonts.borrow();
-        let Some(font_data) = fonts.get(&font) else {
+        let Some(font_data) = fonts.get(&font.0) else {
             return text.len() as f32 * 8.0;
         };
         self.measure_text(text, font_data) / self.scale_factor
     }
 
-    fn draw_text(&mut self, _hdc: usize, text: &str, font: usize, color: Color, pos: Position) {
+    fn draw_text(&mut self, _hdc: DrawContext, text: &str, font: FontHandle, color: Color, pos: Position) {
         self.ensure_clip_mask();
         let fonts = self.fonts.borrow();
-        let Some(font_data) = fonts.get(&font) else {
+        let Some(font_data) = fonts.get(&font.0) else {
             return;
         };
 
@@ -732,18 +732,21 @@ impl DocumentContainer for PixbufContainer {
         }
     }
 
-    fn draw_list_marker(&mut self, _hdc: usize, marker: &ListMarker) {
+    fn draw_list_marker(&mut self, _hdc: DrawContext, marker: &ListMarker) {
         let marker_type = marker.marker_type();
 
         // Numbered markers delegate to draw_text (which manages its own clip mask)
-        if marker_type > 2 {
-            let idx = marker.index();
-            let text = format!("{}.", idx);
-            let font_id = marker.font();
-            let color = marker.color();
-            let pos = marker.pos();
-            self.draw_text(0, &text, font_id, color, pos);
-            return;
+        match marker_type {
+            ListStyleType::None | ListStyleType::Circle | ListStyleType::Disc | ListStyleType::Square => {}
+            _ => {
+                let idx = marker.index();
+                let text = format!("{}.", idx);
+                let font_id = marker.font();
+                let color = marker.color();
+                let pos = marker.pos();
+                self.draw_text(DrawContext::default(), &text, font_id, color, pos);
+                return;
+            }
         }
 
         self.ensure_clip_mask();
@@ -753,7 +756,7 @@ impl DocumentContainer for PixbufContainer {
         let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
 
         match marker_type {
-            0 => {
+            ListStyleType::Disc => {
                 let cx = pos.x + pos.width / 2.0;
                 let cy = pos.y + pos.height / 2.0;
                 let r = pos.width.min(pos.height) / 2.0;
@@ -767,7 +770,7 @@ impl DocumentContainer for PixbufContainer {
                     );
                 }
             }
-            1 => {
+            ListStyleType::Circle => {
                 let cx = pos.x + pos.width / 2.0;
                 let cy = pos.y + pos.height / 2.0;
                 let r = pos.width.min(pos.height) / 2.0;
@@ -785,16 +788,13 @@ impl DocumentContainer for PixbufContainer {
                     );
                 }
             }
-            2 => {
+            ListStyleType::Square => {
                 if let Some(rect) = Rect::from_xywh(pos.x, pos.y, pos.width, pos.height) {
                     self.pixmap
                         .fill_rect(rect, &paint, transform, self.cached_clip_mask.as_ref());
                 }
             }
-            _ => {
-                // Unknown marker type; should not reach here given the >2 check above,
-                // but handle gracefully in case litehtml adds new marker types
-            }
+            _ => {}
         }
     }
 
@@ -817,7 +817,7 @@ impl DocumentContainer for PixbufContainer {
         }
     }
 
-    fn draw_image(&mut self, _hdc: usize, layer: &BackgroundLayer, url: &str, _base_url: &str) {
+    fn draw_image(&mut self, _hdc: DrawContext, layer: &BackgroundLayer, url: &str, _base_url: &str) {
         self.ensure_clip_mask();
         let Some(img) = self.images.get(url) else {
             return;
@@ -873,7 +873,7 @@ impl DocumentContainer for PixbufContainer {
         }
     }
 
-    fn draw_solid_fill(&mut self, _hdc: usize, layer: &BackgroundLayer, color: Color) {
+    fn draw_solid_fill(&mut self, _hdc: DrawContext, layer: &BackgroundLayer, color: Color) {
         if color.a == 0 {
             return;
         }
@@ -898,7 +898,7 @@ impl DocumentContainer for PixbufContainer {
 
     fn draw_linear_gradient(
         &mut self,
-        _hdc: usize,
+        _hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &LinearGradient,
     ) {
@@ -907,7 +907,7 @@ impl DocumentContainer for PixbufContainer {
 
         if stops.len() < 2 {
             if let Some(cp) = points.first() {
-                self.draw_solid_fill(0, layer, cp.color);
+                self.draw_solid_fill(DrawContext::default(), layer, cp.color);
             }
             return;
         }
@@ -950,7 +950,7 @@ impl DocumentContainer for PixbufContainer {
 
     fn draw_radial_gradient(
         &mut self,
-        _hdc: usize,
+        _hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &RadialGradient,
     ) {
@@ -959,7 +959,7 @@ impl DocumentContainer for PixbufContainer {
 
         if stops.len() < 2 {
             if let Some(cp) = points.first() {
-                self.draw_solid_fill(0, layer, cp.color);
+                self.draw_solid_fill(DrawContext::default(), layer, cp.color);
             }
             return;
         }
@@ -1007,7 +1007,7 @@ impl DocumentContainer for PixbufContainer {
 
     fn draw_conic_gradient(
         &mut self,
-        _hdc: usize,
+        _hdc: DrawContext,
         layer: &BackgroundLayer,
         gradient: &ConicGradient,
     ) {
@@ -1015,11 +1015,11 @@ impl DocumentContainer for PixbufContainer {
         // Fill with the first color stop as a fallback.
         let points = gradient.color_points();
         if let Some(cp) = points.first() {
-            self.draw_solid_fill(0, layer, cp.color);
+            self.draw_solid_fill(DrawContext::default(), layer, cp.color);
         }
     }
 
-    fn draw_borders(&mut self, _hdc: usize, borders: &Borders, draw_pos: Position, _root: bool) {
+    fn draw_borders(&mut self, _hdc: DrawContext, borders: &Borders, draw_pos: Position, _root: bool) {
         self.ensure_clip_mask();
         let transform = Transform::from_scale(self.scale_factor, self.scale_factor);
         let x = draw_pos.x;
@@ -1329,7 +1329,7 @@ pub fn render_to_rgba(html: &str, width: u32, height: u32) -> Vec<u8> {
     if let Ok(mut doc) = crate::Document::from_html(html, &mut container, None, None) {
         let _ = doc.render(width as f32);
         doc.draw(
-            0,
+            crate::DrawContext::default(),
             0.0,
             0.0,
             Some(Position {
@@ -1352,7 +1352,7 @@ pub fn render_to_rgba_scaled(html: &str, width: u32, height: u32, scale_factor: 
     if let Ok(mut doc) = crate::Document::from_html(html, &mut container, None, None) {
         let _ = doc.render(width as f32);
         doc.draw(
-            0,
+            crate::DrawContext::default(),
             0.0,
             0.0,
             Some(Position {

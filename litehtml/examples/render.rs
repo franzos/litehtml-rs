@@ -8,7 +8,7 @@ use std::{env, fs, process};
 
 use litehtml::pixbuf::PixbufContainer;
 use litehtml::selection::Selection;
-use litehtml::{Document, Position};
+use litehtml::{Document, DrawContext, Position};
 
 /// Minimum drag distance (px) before selection starts.
 const DRAG_THRESHOLD: f32 = 4.0;
@@ -64,7 +64,7 @@ fn main() {
     if let Ok(mut doc) = Document::from_html(&html, &mut container, None, None) {
         let _ = doc.render(width as f32);
         doc.draw(
-            0,
+            DrawContext::default(),
             0.0,
             0.0,
             Some(Position {
