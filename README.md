@@ -25,6 +25,7 @@ The `litehtml` crate has these feature flags:
 ## Usage
 
 ```rust
+use litehtml::{Document, DrawContext};
 use litehtml::pixbuf::{PixbufContainer, render_to_rgba};
 
 // Quick render to RGBA pixel buffer
@@ -36,7 +37,7 @@ let master_css = litehtml::email::EMAIL_MASTER_CSS;
 
 if let Ok(mut doc) = Document::from_html(html, &mut container, Some(master_css), None) {
     doc.render(600.0);
-    doc.draw(0, 0.0, 0.0, None);
+    doc.draw(DrawContext::default(), 0.0, 0.0, None);
 }
 
 let pixels = container.pixels(); // premultiplied RGBA
@@ -44,7 +45,7 @@ let pixels = container.pixels(); // premultiplied RGBA
 
 ## Building
 
-Requires a C++17 compiler and `clang` (for bindgen).
+Requires a C++17 compiler. Bindgen output is pre-generated; `clang` is only needed if you enable the `buildtime-bindgen` feature in `litehtml-sys`.
 
 With direnv (GUIX -- see `.envrc`):
 

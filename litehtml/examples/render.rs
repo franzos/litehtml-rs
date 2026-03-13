@@ -160,9 +160,8 @@ fn main() {
                 selection_rects.clear();
                 last_mouse = Some((mx, my));
             } else if mouse_down {
-                let moved = last_mouse.map_or(true, |(lx, ly)| {
-                    (mx - lx).abs() > 0.5 || (my - ly).abs() > 0.5
-                });
+                let moved = last_mouse
+                    .is_none_or(|(lx, ly)| (mx - lx).abs() > 0.5 || (my - ly).abs() > 0.5);
 
                 if moved {
                     last_mouse = Some((mx, my));
