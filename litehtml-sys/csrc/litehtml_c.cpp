@@ -1188,7 +1188,13 @@ lh_document_t* lh_document_create_from_string(
 
         auto* container = new CDocumentContainer(vtable, user_data);
 
-        std::string master = master_css ? master_css : litehtml::master_css;
+        // litehtml's built-in master.css omits the HTML spec's `table` text-align
+        // reset, so `<td align>` (mapped to an inherited text-align) leaks into
+        // nested tables. Append it so default rendering matches browsers.
+        // litehtml has no `start`; `left` is its LTR equivalent.
+        std::string master = master_css
+            ? master_css
+            : (std::string(litehtml::master_css) + "\ntable { text-align: left; }\n");
         std::string user   = user_styles ? user_styles : "";
 
         litehtml::document::ptr doc =

@@ -1,3 +1,8 @@
+## [0.2.5] - 2026-05-25
+
+### Fixed
+- Nested table cells no longer inherit `text-align` from a parent `<td align>`; default master.css now resets table alignment to match browsers
+
 ## [0.2.4] - 2026-03-12
 
 ### Added
