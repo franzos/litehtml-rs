@@ -24,7 +24,27 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features
 
-      - name: Publish to crates.io
-        uses: katyo/publish-crates@02cc2f1ad653fb25c7d1ff9eb590a8a50d06186b # v2
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      # Plain `cargo publish` (not a wrapper action) so Scorecard credits
+      # Packaging. Publish sys before the crate that depends on it; skip either
+      # if that version is already on crates.io (re-runs, or an unchanged member).
+      - name: Publish litehtml-sys to crates.io
+        run: |
+          ver=$(cargo pkgid -p litehtml-sys | sed 's/.*[@#]//')
+          if curl -sf -A "litehtml-rs-ci (mail@gofranz.com)" https://index.crates.io/li/te/litehtml-sys | grep -q "\"vers\":\"$ver\""; then
+            echo "litehtml-sys $ver already published, skipping"
+          else
+            cargo publish -p litehtml-sys --locked
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish litehtml to crates.io
+        run: |
+          ver=$(cargo pkgid -p litehtml | sed 's/.*[@#]//')
+          if curl -sf -A "litehtml-rs-ci (mail@gofranz.com)" https://index.crates.io/li/te/litehtml | grep -q "\"vers\":\"$ver\""; then
+            echo "litehtml $ver already published, skipping"
+          else
+            cargo publish -p litehtml --locked
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
