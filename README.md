@@ -1,6 +1,7 @@
 # litehtml-rs
 
 [![crates.io](https://img.shields.io/crates/v/litehtml.svg)](https://crates.io/crates/litehtml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/franzos/litehtml-rs/badge)](https://scorecard.dev/viewer/?uri=github.com/franzos/litehtml-rs)
 
 Rust bindings for [litehtml](https://github.com/litehtml/litehtml) -- a lightweight HTML/CSS rendering engine. It handles email HTML and simple, content-focused websites well (think [bettermotherfuckingwebsite.com](http://bettermotherfuckingwebsite.com/)), but modern JS-heavy sites with megabytes of CSS will be slow or render incorrectly.
 

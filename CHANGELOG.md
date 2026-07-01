@@ -1,3 +1,14 @@
+## [0.2.6] - 2026-07-01
+
+### Added
+- OpenSSF Scorecard workflow and README badge
+- `SECURITY.md` with private vulnerability reporting
+- `renovate.json` for dependency updates
+
+### Changed
+- Workflow actions pinned to SHAs; least-privilege permissions
+- Bumped `rustls-webpki`, `anyhow`, `memmap2` to clear advisories
+
 ## [0.2.5] - 2026-05-25
 
 ### Fixed
